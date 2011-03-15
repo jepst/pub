@@ -1,0 +1,286 @@
+@article{Wall1991,
+ author = {Wall, David W.},
+ title = {Limits of instruction-level parallelism},
+ journal = {SIGARCH Comput. Archit. News},
+ volume = {19},
+ issue = {2},
+ month = {April},
+ year = {1991},
+ issn = {0163-5964},
+ pages = {176--188},
+ numpages = {13},
+ acmid = {106991},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+}
+
+@inproceedings{Murray2010,
+ author = {Murray, Derek G. and Hand, Steven},
+ title = {Scripting the cloud with Skywriting},
+ booktitle = {Proceedings of the 2nd USENIX conference on Hot topics in cloud computing},
+ series = {HotCloud'10},
+ year = {2010},
+ location = {Boston, MA},
+ pages = {12--12},
+ numpages = {1},
+ acmid = {1863115},
+ publisher = {USENIX Association},
+ address = {Berkeley, CA, USA},
+}
+
+@Unpublished{strategies-2010,
+   author = {Simon Marlow and Patrick Maier and Hans-Wolfgang Loidl and Mustafa K Aswad and Phil Trinder},
+   title = {Seq no more: Better Strategies for Parallel Haskell},
+   year = {2010},
+   abstract = {We present a complete redesign of Evaluation Strategies, a key
+abstraction for specifying pure, deterministic parallelism in Haskell.
+Our new formulation preserves the compositionality and modularity
+benefits of the original, while providing significant new benefits.
+First, we introduce an evaluation-order monad to provide clearer, more
+generic, and more efficient specification of parallel evaluation.
+Secondly, the new formulation resolves a subtle space management issue
+with the original strategies, allowing parallelism (sparks) to be
+preserved while reclaiming heap associated with superfluous
+parallelism.  Related to this, the new formulation provides far better
+support for speculative parallelism as the garbage collector now
+prunes unneeded speculation.  Finally, the new formulation provides
+improved compositionality: we can directly express parallelism
+embedded within lazy data structures, producing more compositional
+strategies, and our basic strategies are parametric in the
+coordination combinator, facilitating a richer set of parallelism
+combinators.
+
+We give measurements over a range of benchmarks demonstrating that the
+runtime overheads of the new formulation relative to the original are
+low, and the new strategies even yield slightly better speedups on
+average than the original strategies.
+},
+   url = {http://www.haskell.org/~simonmar/papers/strategies.pdf},
+   note = {Submitted to the Haskell Symposium 2010}
+}
+
+@Unpublished{cnc-2010,
+   author = {Ryan Newton and Chih-Ping Chen and Simon Marlow},
+   title = {Intel Concurrent Collections for Haskell},
+   year = {2010},
+   abstract = {Intel Concurrent Collections (CnC) is a parallel programming
+model in which a network of steps (functions) communicate
+through message-passing as well as a limited form of shared memory.
+This paper describes a new implementation of CnC for Haskell.
+Compared to existing parallel programming models for Haskell,
+CnC occupies a useful point in the design space: pure and deterministic
+like Strategies, but more explicit about granularity and
+the structure of the computation, which affords the programmer
+greater control over parallel performance. We present results on 4,
+32, and 48-core machines demonstrating parallel speedups ranging
+between 7X and 22X on non-trivial benchmarks.
+},
+   url = {http://www.haskell.org/~simonmar/papers/haskell_cnc_draft_submission.pdf},
+   note = {Submitted to the Haskell Symposium 2010}
+}
+
+@article{Lamport:1978:TCO:359545.359563,
+ author = {Lamport, Leslie},
+ title = {Ti clocks, and the ordering of events in a distributed system},
+ journal = {Commun. ACM},
+ volume = {21},
+ issue = {7},
+ month = {July},
+ year = {1978},
+ issn = {0001-0782},
+ pages = {558--565},
+ numpages = {8},
+ acmid = {359563},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {clock synchronization, computer networks, distributed systems, multiprocess systems},
+}
+
+@MISC{Erlang93,
+    author = {Joe Armstrong and Robert Virding and Claes Wikström and Mike Williams},
+    title = {Concurrent Programming in ERLANG},
+    year = {1993}
+}
+@ARTICLE{ProblemWithThreads, 
+author={Lee, E.A.}, 
+journal={Computer}, title={The problem with threads}, 
+year={2006}, 
+month=may, 
+volume={39}, 
+number={5}, 
+pages={ 33 - 42}, 
+keywords={ MPI; OpenMP; PVM; computer architectures; concurrent programming; data-parallel language extension; general-purpose architectures; message-passing libraries; operating system; programming languages; sequential processes; software engineering; threads programming model; message passing; multi-threading;}, 
+doi={10.1109/MC.2006.180}, 
+ISSN={0018-9162},}
+
+@article{MapReduce2008,
+ author = {Dean, Jeffrey and Ghemawat, Sanjay},
+ title = {MapReduce: simplified data processing on large clusters},
+ journal = {Commun. ACM},
+ volume = {51},
+ issue = {1},
+ month = {January},
+ year = {2008},
+ issn = {0001-0782},
+ pages = {107--113},
+ numpages = {7},
+ acmid = {1327492},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+}
+
+
+@article{Dryad2007,
+ author = {Isard, Michael and Budiu, Mihai and Yu, Yuan and Birrell, Andrew and Fetterly, Dennis},
+ title = {Dryad: distributed data-parallel programs from sequential building blocks},
+ journal = {SIGOPS Oper. Syst. Rev.},
+ volume = {41},
+ issue = {3},
+ month = {March},
+ year = {2007},
+ issn = {0163-5980},
+ pages = {59--72},
+ numpages = {14},
+ acmid = {1273005},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {cluster computing, concurrency, dataflow, distributed programming},
+}
+@inproceedings{Dph2007,
+ author = {Chakravarty, Manuel M. T. and Leshchinskiy, Roman and Jones, Simon Peyton and Keller, Gabriele and Marlow, Simon},
+ title = {Data parallel Haskell: a status report},
+ booktitle = {Proceedings of the 2007 workshop on Declarative aspects of multicore programming},
+ series = {DAMP '07},
+ year = {2007},
+ isbn = {978-1-59593-690-5},
+ location = {Nice, France},
+ pages = {10--18},
+ numpages = {9},
+ acmid = {1248652},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+}
+@inproceedings{Parallel2008,
+ author = {Jones, Simon Peyton and Singh, Satnam},
+ title = {A tutorial on parallel and concurrent programming in Haskell},
+ booktitle = {Proceedings of the 6th international conference on Advanced functional programming},
+ series = {AFP'08},
+ year = {2009},
+ isbn = {3-642-04651-7, 978-3-642-04651-3},
+ location = {Heijen, The Netherlands},
+ pages = {267--305},
+ numpages = {39},
+ acmid = {1813353},
+ publisher = {Springer-Verlag},
+ address = {Berlin, Heidelberg},
+}
+
+@article{Armbrust2010,
+ author = {Armbrust, Michael and Fox, Armando and Griffith, Rean and Joseph, Anthony D. and Katz, Randy and Konwinski, Andy and Lee, Gunho and Patterson, David and Rabkin, Ariel and Stoica, Ion and Zaharia, Matei},
+ title = {A view of cloud computing},
+ journal = {Commun. ACM},
+ volume = {53},
+ issue = {4},
+ month = {April},
+ year = {2010},
+ issn = {0001-0782},
+ pages = {50--58},
+ numpages = {9},
+ acmid = {1721672},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+}
+@ARTICLE{OpenMP, 
+author={Dagum, L. and Menon, R.}, 
+journal={Computational Science Engineering, IEEE}, title={OpenMP: an industry standard API for shared-memory programming}, 
+year={1998}, 
+month=jan-mar, 
+volume={5}, 
+number={1}, 
+pages={46 -55}, 
+keywords={Fortran;Fortran 90;Fortran 95;Fortran compiler;OpenMP;X3H5 concepts;allocatables;callable runtime library;callable runtime library routines;coarse grain parallelism;compiler directives;environment variables;industry standard API;pointers;shared memory parallelism;shared memory programming;application program interfaces;parallel programming;shared memory systems;software portability;software reviews;software standards;}, 
+doi={10.1109/99.660313}, 
+ISSN={1070-9924},}
+
+@article{Syb2003,
+ author = {L\"{a}mmel, Ralf and Jones, Simon Peyton},
+ title = {Scrap your boilerplate: a practical design pattern for generic programming},
+ journal = {SIGPLAN Not.},
+ volume = {38},
+ issue = {3},
+ month = {January},
+ year = {2003},
+ issn = {0362-1340},
+ pages = {26--37},
+ numpages = {12},
+ acmid = {604179},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {generic programming, rank-2 types, traversal, type cast},
+}
+
+@inproceedings{Orc2010,
+ author = {Launchbury, John and Elliott, Trevor},
+ title = {Concurrent orchestration in Haskell},
+ booktitle = {Proceedings of the third ACM Haskell symposium on Haskell},
+ series = {Haskell '10},
+ year = {2010},
+ isbn = {978-1-4503-0252-4},
+ location = {Baltimore, Maryland, USA},
+ pages = {79--90},
+ numpages = {12},
+ acmid = {1863534},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {concurrency, dsl, haskell, monad, orc},
+}
+@inproceedings{Quincy2009,
+ author = {Isard, Michael and Prabhakaran, Vijayan and Currey, Jon and Wieder, Udi and Talwar, Kunal and Goldberg, Andrew},
+ title = {Quincy: fair scheduling for distributed computing clusters},
+ booktitle = {Proceedings of the ACM SIGOPS 22nd symposium on Operating systems principles},
+ series = {SOSP '09},
+ year = {2009},
+ isbn = {978-1-60558-752-3},
+ location = {Big Sky, Montana, USA},
+ pages = {261--276},
+ numpages = {16},
+ acmid = {1629601},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {cluster scheduling, dryad, fair scheduling, mapreduce, network flow scheduling},
+}
+
+@Article{Waterman81,
+  author =       {M. S. Waterman and T. F. Smith},
+  title =        {Identification of common molecular subsequences.},
+  journal =      {J. Mol. Biol.},
+  volume =       {147},
+  pages =        {195--197},
+  year =         {1981},
+  keywords =     {MolBio, DNA, homology, longest common subsequence,
+                 LCS, LCSS, edit distance, JMB},
+  abstract =     {note on distance metrics amino-acid/amino-acid etc.},
+}
+
+@Book{mpi99,
+author	 =	"William Gropp and Ewing Lusk and Anthony Skjellum",
+title	 =	"Using {MPI}: Portable Parallel Programming with the Message	 Passing Interface, {\rm 2nd edition}",
+address	 =	"Cambridge, MA",
+publisher	 =	"MIT Press",
+year	 =	1999,
+area	 =	"M",
+areaseq	 =	"0",
+}
+﻿@incollection {gdh2001,
+   author = {Pointon, R.F. and Trinder, P.W. and Loidl, H.-W.},
+   affiliation = {Heriot-Watt University Department of Computing and Electrical Engineering EH14 4AS Edinburgh UK},
+   title = {The Design and Implementation of Glasgow Distributed Haskell},
+   booktitle = {Implementation of Functional Languages},
+   series = {Lecture Notes in Computer Science},
+   editor = {Mohnen, Markus and Koopman, Pieter},
+   publisher = {Springer Berlin / Heidelberg},
+   isbn = {},
+   pages = {53-70},
+   volume = {2011},
+   year = {2001}
+}

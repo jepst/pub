@@ -1,0 +1,556 @@
+%-----------------------------------------------------------------------------
+%
+%               Template for sigplanconf LaTeX Class
+%
+% Name:         sigplanconf-template.tex
+%
+% Purpose:      A template for sigplanconf.cls, which is a LaTeX 2e class
+%               file for SIGPLAN conference proceedings.
+%
+% Author:       Paul C. Anagnostopoulos
+%               Windfall Software
+%               978 371-2316
+%               paul@windfall.com
+%
+% Created:      15 February 2005
+%
+%-----------------------------------------------------------------------------
+
+
+\documentclass[preprint]{sigplanconf}
+
+% The following \documentclass options may be useful:
+%
+% 10pt          To set in 10-point type instead of 9-point.
+% 11pt          To set in 11-point type instead of 9-point.
+% authoryear    To obtain author/year citation style instead of numeric.
+
+\usepackage{amsmath}
+\usepackage{listings}
+
+\begin{document}
+
+\lstset{language=Haskell, basicstyle=\footnotesize, numbers=none, numberstyle=\footnotesize, stepnumber=1, numbersep=5pt, showspaces=false, showtabs=false, frame=none, tabsize=2, captionpos=b, breaklines=true, breakatwhitespace=false, xleftmargin=10pt}
+
+% from http://www.haskell.org/haskellwiki/Literate_programming
+\lstnewenvironment{code}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      basicstyle=\small\ttfamily,
+      flexiblecolumns=false,
+      basewidth={0.5em,0.45em},
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {|}{{$\mid$}}1               
+    }
+
+
+\conferenceinfo{WXYZ '05}{date, City.} 
+\copyrightyear{2011} 
+\copyrightdata{[to be supplied]} 
+
+\titlebanner{banner above paper title}        % These are ignored unless
+\preprintfooter{short description of paper}   % 'preprint' option specified.
+
+
+
+
+
+%%%%% Andrew's commands
+\newcommand{\ct}[1]{\textsf{#1}}
+
+\newcommand{\nfn}{\ensuremath{\stackrel{\hash}{\rightarrow}}}
+\newcommand{\nlambda}{\ensuremath{\lambda^\hash}\,}
+\newcommand{\napp}{\ensuremath{\;\ct{\small \$}^{\hash}\,}}
+
+\newcommand{\Int}{\mathbb{Z}}
+\newcommand{\pair}[2]{\mbox{$\langle$#1, #2$\rangle$}}
+\newcommand{\mpair}[2]{\mbox{$\langle #1, #2 \rangle$}}
+\newcommand{\entails}{\vdash}
+\newcommand{\hash}{\texttt{\#}}
+\newcommand{\closed}[1]{\hash\,#1}
+
+
+
+
+
+
+\title{Functional programming in the cloud}
+\subtitle{}
+
+\authorinfo{Name1}
+           {Affiliation1}
+           {Email1}
+\authorinfo{Name2\and Name3}
+           {Affiliation2/3}
+           {Email2/3}
+
+\maketitle
+
+\begin{abstract}
+% 1. What's the problem?
+% 2. What does it matter?
+% 3. What's the solution?
+% 4. What are the consequences?
+We present a framework for developing Haskell programs to be run in a distributed computing environment. It provides a message-passing communication model, inspired by Erlang, while still allowing Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, without giving up Haskell's strengths in strong typing and traditional concurrent programming.
+
+\end{abstract}
+
+\category{CR-number}{subcategory}{third-level}
+
+\terms
+term1, term2
+
+\keywords
+distributed, cloud, Erlang, Haskell
+
+\section{Introduction}
+
+With the age of steadily improving processor performance behind us, the way forward seems to be to compute with more, rather than faster, processors. A data center for storing and processing end users' data or running users' programs on a  group of servers is termed a {\em cloud}. We'll use this term to mean specifically a network of connected computers, having independent failure modes and separate memories. But how to program such a system?
+
+Developing for the cloud presents some unique challenges. There is the obvious task of coordinating program control between many, possibly heterogeneous computers. In addition, the programmer needs to expect that in a network of dozens or hundreds of computers, some of them will fail, and so any such cloud system needs to be able to tolerate partial failure of any of its constituents. And, of course, the cloud needs to be able to deliver high performance, particularly as it relates to data locality: without shared memory, a major drain on performance is the transmission of data across the network, and so the framework needs to expose some ability to control which data is moved and when.
+
+How shall we address these issues? To the extent that modern, popular programming languages support concurrency, it's usually of a shared-memory variety: that is, it presents the programmer with the abstraction of multiple concurrent threads accessing a pool of mutable common data. This model is clearly inappropriate for programming concurrency in a cloud, as there is in fact no shared memory between physically independent computers.
+
+The solution we use, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}, is {\em message passing}. The message passing model stipulates that the concurrent threads have no implicit access to each other's data, but instead share data explicitly by sending and receiving {\em messages}. 
+
+Even better, the message-passing model for thread communication eliminates some of the classic concurrency pitfalls, such as race conditions, which cause bugs whose detection and removal may be beyond the skill of many programmers. 
+
+Haskell is an ideal language for this problem space. As a pure functional language, data is by default immutable, so the lack of shared mutable data won't be missed. Also, since code is by default idempotent, code running on failing hardware can be restarted elsewhere without the need for distributed transactions.
+
+Our framework is composed of two layers:
+
+\begin{enumerate}
+\item The task layer -- The basic unit of control here is the {\em task}, an idempotent, restartable block of code which produces a well-defined result. The framework takes care of allocating tasks to physical resources, resolving data dependencies between graphs, transmitting intermediary results, and recovering from failure. Data dependencies and tasks are represented as the edges and vertices, respectively, of a directed acyclic graph. Data dependencies are exposed to the programmer as {\em promises}.
+\item The process layer -- This layer provides {\em processes}, units of concurrently executing code within a cloud. The framework provides facilities for starting processes on remote nodes, exchanging messages between them, and detecting their failure. The process layer provides the basis for the implementation of the task layer.
+\end{enumerate}
+
+Both of these layers are accessible as a small domain-specific language (DSL), embedded in Haskell as a monad. In this paper, we're focusing on the process layer.
+
+The contributions of this paper are a proposal for a distributed programming API for Haskell; a method for serializing function closures to enable higher-order functions to work in a distributed environment; and a demonstration of the effectiveness of our approach in the form of example applications.
+
+\section{Message passing}
+
+The basic unit of concurrency in our framework is the {\em process}. A process is a thread that has been ``blessed'' with the ability to send and receive messages. This functionality is implemented in the \texttt{ProcessM} monad, such that all the state associated with messaging (most especially, the message queue) is wrapped in that data structure, which is updated with each statement. Thus, any code participating in messaging must be in the ProcessM monad.
+
+\subsection{Messages to processes}
+
+Consider a simple process that accepts ``pong'' messages and responds by sending a corresponding ``ping'' to the pong's sender. Using our framework, the code for such a process would look like this:
+
+\begin{code}[caption={Ping in Haskell}]
+data Ping = Ping ProcessId
+data Pong = Pong ProcessId
+-- omitted: Serializable instance for Ping and Pong
+
+ping :: ProcessId -> ProcessM ()
+ping self = 
+   do { receiveWait [
+          match (\ (Pong partner) -> 
+            send partner (Ping self)) ]
+      ; ping self }
+\end{code}
+
+The equivalent code in Erlang looks like this:
+
+\begin{code}[language=Erlang,caption={Ping in Erlang}]
+ping() ->
+  receive
+    {pong, Partner} -> 
+      Partner ! {ping, self()}
+  end,
+  ping().               
+\end{code}
+
+These two programs have nearly identical structure. Both \texttt{ping} functions are designed to be run as processes. They each wait for a message to be received, matching incoming messages by type. They look for the ``pong'' message, and ignore all others. The ``pong'' message contains in its payload a process ID, to which the response message is sent, this time containing the process ID of the \texttt{ping} process (given in both languages as \texttt{self}). Finally, they wait for the next message by repeating with tail recursion.
+
+If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, the types of \texttt{Ping} and \texttt{Pong} need to be declared explicitly. As given, they are incomplete, as the instance declarations have been omitted for brevity.
+
+Here we present some of the important functions that form the messaging API of our framework.
+
+\begin{itemize}
+\item 
+\begin{code}
+send :: (Serializable a) => ProcessId -> a -> ProcessM ()
+\end{code}
+
+To send a message, use \texttt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \texttt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \texttt{Serializable} type class, based on Haskell's \texttt{Data.Binary.Binary}, which allows the data to be converted to a form suitable for transmission. The \texttt{send} function corresponds to Erlang's \texttt{!} operator.
+
+\item 
+\begin{code}
+receiveWait :: [MatchM q ()] -> ProcessM q
+match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
+\end{code}
+
+On the receiving end, \texttt{receiveWait} and \texttt{match}, which operate as a pair, examine the message queue associated with the current process and extract a received message, unpacking the transmitted chunk of data and executing an associated block of user code. Together, they correspond to Erlang's \texttt{receive} construction. Since our framework is packaged as a library, rather than as a language extension, we use the \texttt{MatchM} type to approximate Erlang's specialized syntax. \texttt{receiveWait}'s first parameter is a list of \texttt{match} invocations, where each \texttt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of only certain types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \texttt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
+
+In the ping example above, we use \texttt{receiveWait} and \texttt{match} to accept messages only of type \texttt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \texttt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \texttt{match} will accept only messages of type \texttt{Pong}.
+\end{itemize}
+
+\subsection{Messages through channels}
+In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \texttt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
+
+Thus, an alternative to sending messages by process identifier is to use {\em typed channels}. Each distributed channel consists of two ends, which we call the {\em send port} and {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are associated with a particular type and the send port will accept only messages of that type; likewise, the receive port will emit only messages of that type, so the sender has a guarantee that its sender the right type.
+
+A critical point is that although \texttt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \texttt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \texttt{SendPort} an instance of \texttt{Serializable}, but not \texttt{ReceivePort}. 
+
+The central functions of the channel API are:
+
+\begin{code}
+newChannel :: (Serializable a) => ProcessM (SendPort a, ReceivePort a)
+sendChannel :: (Serializable a) => SendPort a -> a -> ProcessM ()
+receiveChannel :: (Serializable a) => ReceivePort a -> ProcessM a
+\end{code}
+
+
+We can now reformulate our ping example from above to use typed channels. The process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \texttt{Ping} and \texttt{Pong} message now contains the send port on which its recipient should respond; thus the \texttt{Ping} message contains the send port of a channel of pongs, and the \texttt{Pong} message contains the send port of a channel of pings.
+
+% this might not be the best example, really
+\begin{code}
+ping :: SendPort Ping -> ReceivePort Pong -> ProcessM ()
+ping pingout pongin = 
+   do { (Pong partner) <- receiveChannel pongin
+      ; sendChannel partner (Ping pongin) 
+      ; ping pingout pingin }
+\end{code}
+
+How do we start the exchange? Clearly we need to create two channels and call \texttt(ping) and \texttt{pong} (not shown, but substantially similar to \texttt{ping}) as new processes. But how do we start a new process?
+
+\subsection{Spawning processes}
+
+To start a new process on distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, a node. A node can be thought of as an independent address space, and can be identified by its network address. So, to be able to start processes, we want a function named \texttt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. This function should then return a process identifier, which can be used with \texttt{send}, as above. As a first draft, let's consider this possibility:
+
+\begin{code}
+-- wrong
+spawn :: NodeId -> ProcessM () -> ProcessM ProcessId
+\end{code}
+
+It could be used like this:
+
+\begin{code}
+-- wrong
+let printerProcess = receiveWait [
+      match(\s -> liftIO (putStrLn s)) ]
+ in do { newpid <- spawn someNode printerProcess
+       ; send newpid "Greetings" }
+\end{code}
+
+The above example is supposed to start new process on \texttt{someNode}. The new process will listen for a message containing a string, and then print that string using \texttt{putStrLn}. To test this functionality, the main process sends the string ``Greetings'' to the newly-created process.
+
+To understand why this version of \texttt{spawn} is wrong, consider how to implement it. Assuming we have the ability to send messages of arbitrary serializable data, \texttt{spawn} can be implemented using \texttt{send}.  \texttt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node. In the above case, we would send a message containing \texttt{printerProcess}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \texttt{printerProcess} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
+
+The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of these names, such as \texttt{putStrLn}, are global, but some aren't. Consider this example:
+
+\begin{code}
+-- wrong
+let nats = [0..]
+ in spawn aNode (putStrLn (show (head nats))) 
+\end{code}
+
+This snippet above is an attempt to execute the code \lstinline!(putStrLn (show (head nats)))! on some remote system given by \texttt{aNode}. The intent of the remotely-executing code is to take the first element of the infinite list \texttt{nats}, convert it to a string, and write it to standard output. But in order to run the given code on a remote system, the code's environment must also be sent; in this case, that environment includes \texttt{nats}; we say that the code has {\em captured} \texttt{nats}. Clearly, we can't serialize and transmit an infinite list.
+
+In a distributed environment, a critical factor in performance is {\em locality}, by which we mean the relation between where the data is and where the code to act on it is. We want to avoid moving data across the network whenever possible. The programmer needs have control over which data is transmitted, and so in our framework, transmission of captured environment is never implicit, as in the above example.
+
+
+\section{Closures}
+% ----------------------------------------------- BEGIN ANDREW
+
+To provide explicit control over which data accompanies a remote function invocation, we use {\em closures}. For our purposes, a closure is a data structure that encapsulates both a representation of a function and its environment, where its environment is restricted to its parameter list. This seems an usual restriction in a functional environment, where so much of the power of higher-order functions rests in their ability to accept functions that do capture local names. But how can we enforce this restriction? 
+
+\subsection{Closures in theory}
+
+Instead of an unrestricted function $v \rightarrow a$, we posit a new restricted function constructor as a building-block: $v \nfn a$ is the type of all functions from $v$ to $a$ that either have no free variables at all, or all of whose free variables are bound in the environment to other $\nfn$ functions. We will call these restricted functions {\em closed functions}. Such functions are easy to serialize; conceptually, we can send pure code; if we know that the code is already at the destination, we can send a symbolic reference to the code that is already there.  
+
+Closed functions are introduced using a new form of abstraction, which we will write $\nlambda$, and eliminated using a new form of application, which we will write as an infix $\napp$ (and pronounce ``hash-apply'').
+
+Note that primitive functions like $(+)$ are closed functions, and that closed functions can have ordinary $\rightarrow$ functions inside them.  
+
+Let us try and formalize this notion of closed function.  
+When creating a closed function, we need a way of specifying that the free variables of the expression that forms the body of the function can access only other closed functions (and the $\lambda$-bound variable).  We do this by defining a syntactic function \closed{} on environments that strips-out other definitions.  We define \closed{} recursively by cases:
+
+\begin{align*}
+	\closed (\Gamma , x: \tau_1 \nfn \tau_2) 		=& ~ \closed \Gamma , x: \tau_1 \nfn \tau_2 \\
+	\closed (\Gamma , x: \tau)						=& ~ \closed \Gamma   \\
+	\closed \varepsilon 								=& ~ \varepsilon 
+\end{align*}
+
+for any $\tau$ \emph{not} of the form $\tau_1 \nfn{} \tau_2$ and
+where $\varepsilon$ denotes the empty environment.
+
+Primitive functions, placed into $\Gamma$ by the standard prelude, have \nfn{} types, so remain in $\closed{\Gamma}$.
+It would also be safe to allow identifiers that are bound to literal constants to remain in $\closed{\Gamma}$, but not  identifiers that are bound to
+arbitrary expressions, since those expressions may be represented by thunks, which might have free variables.  Unfortunately, because the Haskell type system doesn't distinguish the two, we can't make $\closed$ filter out one but not the other without more extensive changes.
+
+Now we can specify the typing rules for closed function introduction and elimination. 
+
+\begin{equation*}
+\tag{\nfn~intro.}
+\frac{\closed{\Gamma}, x : \tau_1 \entails e : \tau_2}
+		{\Gamma \entails (\nlambda x.e) : \tau_1 \nfn \tau_2}
+\end{equation*}
+
+
+\begin{equation*}
+\tag{\nfn~elim.}
+\frac{\Gamma \entails e : \tau_1 ~~~~ \Gamma \entails f : \tau_1  \nfn \tau_2}
+		{\Gamma \entails (f \napp e) : \tau_2}
+\end{equation*}
+
+
+This lets us use closed functions to represent closures explicitly: a function with free variables can be converted into a closed function by converting its free variables into explicit arguments.
+
+We can capture this idea in a datatype that we will call a \ct{Clo}, because it represents a closure.
+\begin{align*}
+\ct{data}~&\ct{Clo}~\ct{b}~\ct{where}\\
+				 	&\sf Clo :: \sf (rep \nfn b) \rightarrow rep \rightarrow Clo~b
+\end{align*}
+
+\texttt{Clo fun argList} packages up computation that will eventually compute a value of type $b$, where $b$ is the return type of the function \texttt{fun}.  
+\texttt{fun}'s free variables have been turned into parameters, so we have to pass those parameters along, in \texttt{argList}, as part of the closure.  
+Notice that the type of the argument to \texttt{fun} (which I called \texttt{rep}), and of \texttt{argList}, must be the same.
+Moreover, in the abstract, no one else need care exactly what \texttt{rep} is: in essence, it is an existential type.
+
+However, in the concrete, ``someone else'' does have to care: the serialization machinery needs a way of unserializing the \texttt{rep}.  
+You might think that the compiler knows what \texttt{rep} is, but this turns out not to be the case. 
+The compiler does indeed know the principle type, but, because of existential types that may be buried deep within \ct{rep}, it does not in general know the 
+actual instance type. Neither can we generate the deserialization code dynamically, because Haskell does not maintain any type information at run-time. We are then presented with the two problems of how to concretely represent the closed function and environment in Haskell.
+
+% ---------------------------------------------------- END ANDREW
+
+\subsection{Closures in practice}
+
+Once we've collected all of a functions free variables, serializing them is easy: we can use Haskell's \texttt{Data.Binary} module to convert ordinary data into a \texttt{ByteString}. This is fine, since ultimately our whole message will be converted into a \texttt{ByteString} for transmission to the remote host. We are now one step closer to a working closure. Our current version looks like this:
+
+\begin{align*}
+\ct{data}~\ct{Clo}~\ct{b}~\ct{where}&\\
+\ct{Clo}::&(\ct{ByteString} \nfn \ct{b}) \rightarrow \ct{ByteString} \rightarrow \ct{Clo}~\ct{b}
+\end{align*}
+
+The closed function, then, must accept its environment as a \texttt{ByteString}. It is ultimately only the function itself that knows the type of environment that it expects, and this information cannot be extracted at runtime.
+
+Now, to the question of how to find a serializable representation for a closed function $\ct{ByteString} \nfn b$. There are a few possible answers to the question of what it means to represent a function. The goal of serializing a function is to be able to eventually deserialize and run the function. One way to achieve this would be to transmit the code of the function itself, either as source code or in some compiled form; these are solutions not well suited to a language that compiles to machine code, as we'd ideally like to run our application on a heterogeneous network. Alternatively, we might serialize a function as a unique identifier, under the condition that we know that the code already exists at the destination node and we can map the identifier to the code that it identifies; in some environments the unique identifier might be a pointer or the name of the function. And whichever form of representation we use, we need to be able to enforce the requirements of the closed function, i.e. no free variables that aren't included in the environment. Ideally, we'd like to be able to do this without extended the language.
+
+Fortunately, Haskell already offers us a way to ensure that a function doesn't capture names from its environment: top-level functions are guaranteed to be able to see only other top-level functions. Even better, if the same code is running on all nodes, then such functions will have an easily accessible, unique identifier: the fully-qualified name, consisting of module and function name. So, if we restrict the set of serializable functions to top-level functions, we have a simple way to approximate the requirements of closed functions. Our approximation is a little overly restrictive, as we won't be able to find representations for those functions that are closed but not top-level. In practice, this is only a minor inconvenience.
+
+So, the implementation of our \texttt{Clo} data structure now looks like this:
+
+\begin{code}
+data Clo b = Clo String ByteString
+\end{code}
+
+In other words, a closure consists of a \texttt{String}, which is the fully-qualified name of a top-level function of type \lstinline!ByteString -> b!, and a \texttt{ByteString}, which is a serialized representation of a tuple containing the parameters to that function. As a concrete example, let's consider a program to add two numbers on a remote host. The function in question is:
+
+\begin{code}
+add :: Int -> Int -> Int
+add = (+)
+\end{code}
+
+Now we need a ``wrapper'' version of this function that accepts a \texttt{ByteString}:
+
+\begin{code}
+module Main where
+add_wrap :: ByteString -> Int
+add_wrap bs = let (i1, i2) = decode bs
+               in add i1 i2
+\end{code}
+
+Here we're using Haskell's \texttt{Data.Binary.decode} function to convert the serialized environment into a tuple containing the parameters to the \texttt{add} function. Haskell's type inference will make sure that the \texttt{ByteString} is deserialized to the right type. Now that we have the wrapper, we can construct a closure and pass it to spawn:
+
+\begin{code}
+-- correct, finally!
+let addEnv = encode (5, 12)
+    addClo = Clo "Main.add_wrap" addEnv
+ in spawn aNode addClo
+\end{code}
+
+The \texttt{Data.Binary.encode} function is the counterpart to \texttt{decode}, used above, and converts the tuple into a \texttt{ByteString}. The closure is constructed with the function's environment and name of the (closed) wrapper function, which will in turn call the underlying function. The whole closure is then given to \texttt{spawn}, which can send the closure in a message to the remote host.
+
+And how will the closure be invoked on the other end of the wire? The receiving node needs a table mapping function names to their implementations. It's sufficient to call the right function with the \texttt{ByteString} given in the closure.
+
+What can happen if something goes wrong? What, for example, will happen if we have different code on the two sides of communication? If the function named in the closure doesn't exist on the other side, looking it up in the function table will fail, and \texttt{spawn} can report the error to the programmer. More insidiously, what if a function of the same name exists, but with a different environment? In this case, depending on how the types differs, it's possible for the environment's deserialization to not fail, but to succeed by extracting incorrect values from the \texttt{ByteString}, which is worse than failing. We can eliminate this risk by including by including a representation of the environment type in the closure, and checking this type against the expected type on the remote end.
+
+
+\subsection{Closures, with sugar}
+
+The above procedure for remotely invoking a closure seems prohibitively cumbersome. Fortunately, the Template Haskell facility lets us generate some sugar for all this which simplifies the procedure greatly. Template Haskell provides compile-time rewriting facilities that let us remove much of the tedium of writing wrapper functions. Our framework includes a compile-time \texttt{remoteCall} function that operates on groups of Haskell function definitions and automatically produces wrapper functions and closure-generators that can be used with \texttt{spawn}. Let's revisit the \texttt{add} example from above. The programmer can request generation of the requisite stub functions using this syntax:
+
+\begin{code}
+remoteCall
+  [d|
+    add :: Int -> Int -> Int
+    add = (+)
+  |]
+\end{code}
+
+The special braces (\texttt{[d|} \texttt{|d}) are used by Template Haskell to quote declarations. An abstract syntax tree corresponding to the enclosed is given to \texttt{remoteCall}, which produces all the code we need to conveniently call \texttt{add} remotely:
+
+\begin{code}
+-- the original function, unchanged
+add :: Int -> Int -> Int
+add = (+)
+
+-- the deserializing wrapper
+add__impl :: ByteString -> Int
+add__impl bs = let (i1, i2) = decode bs
+                in add i1 i2
+
+-- the closure generator
+add__closure :: Int -> Int -> Clo Int
+add__closure i2 i2 = let bs = encode (i1, i2)
+                      in Clo "add__impl" bs
+
+-- the lookup table
+__remoteCallMetaData = makeMakeData ("add__impl",add__impl) None
+\end{code}
+
+Now, when the programmer wants to remotely invoke \texttt{add}, all that's necessary is to use \texttt{add\_\_closure} in place of \texttt{add}:
+
+\begin{code}
+spawn aNode (add__closure 5 12)
+\end{code}
+
+The underlying machinery takes care of the rest. \texttt{add\_\_closure} serializes its arguments and returns a closure pointing to the closed function \texttt{add\_\_impl}. When the closure the received by the remote host, the code corresponding the string \texttt{"add\_\_impl"} can be looked up in \texttt{\_\_remoteCallMetaData}, and \texttt{add\_\_impl} will be called, given the serialized environment as a parameter. Because \texttt{add\_\_impl} was generated bespoke for \texttt{add}, it knows how to deserialize the environment and call the right implementation.
+
+\begin{itemize}
+\item local processes (with capture) vs. remote processes (without)
+\item Serialization of closures
+\item serialization doesn't work with existentials and gadts, polymorphic
+\item theoretical ``hash arrows'' and their implementation as strings
+\item convenient syntax thanks to Template Haskell
+\item Combined process invocation and environment demarshalling
+\end{itemize}
+
+
+\section{Implementation}
+Erlang has a nice feature that lets program modules be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without even having to restart the application. We decided not to go in this direction with our framework, partly because it's a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, where Erlang's bytecode interpreter retains more control over the loading and execution of programs.
+
+A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \texttt{ssh} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializer.
+
+\begin{itemize}
+\item based on Haskell's lightweight threads  and stm
+\item Examples of configuration, deployment
+\item syntax examples, comparison with Erlang
+\item examples of applications: pi, k-means
+\end{itemize}
+
+
+\section{Examples}
+Here, we show how this framework can be used to implement some well-known distributed algorithms.
+pi calculator, omit sequence generator
+fgrep
+
+
+An example of storing process-local state using tail recursion.
+\begin{code}
+data CounterMessage = CounterQuery ProcessId
+                    | CounterIncrement
+-- omitted: Serializable instance for CounterMessage
+
+counterLoop :: Int -> ProcessM ()
+counterLoop value =
+  let
+    counterComand (CounterQuery pid) =
+      do { send pid value
+         ; return value }
+    counterComand CounterIncrement =
+      return (value+1)
+  in receiveWait [match counterCommand]
+       >>= counterLoop
+
+$(remoteCall [d|
+    startCounter :: ProcessM ()
+    startCounter = counterLoop 0
+  |]
+
+increment :: ProcessId -> ProcessM ()
+increment counterpid = send counterpid msg
+  where msg = CounterIncrement
+
+query :: ProcessId -> ProcessM Int
+query counterpid =
+  do { mypid <- getSelfPid
+     ; let msg = CounterQuery mypid
+     ; send counterpid msg
+     ; receiveWait [match return] }
+
+main =
+  do { mynode <- getSelfNode
+     ; counterpid <- spawn mynode startCounter__closure
+     ; increment counterpid
+     ; increment counterpid
+     ; print $ query counterpid }
+     -- prints out 2
+\end{code}
+
+more example? node discovery? roles?
+
+\section{Performance}
+\begin{center}
+\begin{table}[h]
+ \caption{Performance of k-means clustering}
+\begin{tabular}{l c c|r}
+\hline
+  \# points & \# reducers & \# mappers & Time (s) \\
+  170,000 & 2 & 17 & 204 \\
+  370,000 & 2 & 37 & 248 \\
+  560,000 & 3 & 56 & 289 \\
+  750,000 & 4 & 75 & 353 \\
+\hline
+\end{tabular}
+\end{table}
+\end{center}
+\begin{itemize}
+\item how to store process-local state
+Haskell explicit about effects
+message queues force state updates to be serialized as parameters to function using tail-recursion 
+
+\item of k-means
+\item what other interesting performance measures? graph?
+\item with various numbers of hosts
+\end{itemize}
+
+\section{Related work}
+\begin{itemize}
+\item Erlang 
+\item mpi 
+\item Clean, dynamic types
+\item RPC, stub generation: soap, IDL
+\item Concurrent Haskell \cite{Parallel2008}, Glasgow Distributed Haskell \cite{gdh2001}
+\item Dryad \cite{Dryad2007}, MapReduce \cite{MapReduce2008}, Skywriting \cite{Murray2010}
+\end{itemize}
+
+\section{Future work}
+\begin{itemize}
+\item Skywriting-y layer on top?
+\item Isis/Paxos/virtual synchrony consensus?
+\end{itemize}
+
+% \appendix
+% \section{Appendix Title}
+% This is the text of the appendix, if you need one.
+
+\acks
+
+Acknowledgments.
+
+% The bibliography should be embedded for final submission.
+
+\bibliographystyle{abbrvnat}
+\bibliography{bib}
+
+%\bibliographystyle{abbrvnat}
+%\begin{thebibliography}{}
+%\softraggedright
+%
+%\bibitem[Smith et~al.(2009)Smith, Jones]{smith02}
+%P. Q. Smith, and X. Y. Jones. ...reference text...
+%
+%\end{thebibliography}
+
+\end{document}
