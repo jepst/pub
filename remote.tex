@@ -121,7 +121,7 @@ keyword1, keyword2
 
 With the age of steadily improving processor performance behind us, the way forward seems to be to compute with more, rather than faster, processors. A data center for storing and processing end users' data or running users' programs on a  group of servers is termed a {\em cloud}. We'll use this term to mean specifically a network of connected computers, having independent failure modes and separate memories. But how to program such a system?
 
-Developing for the cloud presents some unique challenges. There is the obvious task of coordinating program control between many, possibly heterogeneous computers. In addition, the programmer needs to expect that in a network of dozens or hundreds of computers, some of them will fail, and so any such cloud system needs to be able to tolerate partial failure of any of its constituents. And, of course, the cloud needs to be able to deliver high performance, particularly as it relates to data locality: without shared memory, a major drain on performance is the transmission of data across the network, and so the framework needs to expose some ability to control which data is moved and when.
+Developing for the cloud presents some unique challenges. There is the obvious task of coordinating program control between many, possibly heterogeneous computers. In addition, the programmer needs to expect that in a network of dozens or hundreds of computers, some of them will fail, and so any such cloud system needs to be able to tolerate partial failure of any of its constituents. And, of course, the cloud needs to be able to deliver high performance, particularly as it relates to data locality: without shared memory, a major drain on performance is the transmission of data across the network, and so the framework needs to expose some ability to control the application's {\em cost model}, that is, which data is moved and when.
 
 How shall we address these issues? To the extent that modern, popular programming languages support concurrency, it's usually of a shared-memory variety: that is, it presents the programmer with the abstraction of multiple concurrent threads accessing a pool of mutable common data. This model is clearly inappropriate for programming concurrency in a cloud, as there is in fact no shared memory between physically independent computers.
 
@@ -131,7 +131,13 @@ Even better, the message-passing model for thread communication eliminates some 
 
 Haskell is an ideal language for this problem space. As a pure functional language, data is by default immutable, so the lack of shared mutable data won't be missed. Also, since code is by default idempotent, code running on failing hardware can be restarted elsewhere without the need for distributed transactions.
 
-The contributions of this paper are a proposal for a distributed programming API for Haskell; a method for serializing function closures to enable higher-order functions to work in a distributed environment; and a demonstration of the effectiveness of our approach in the form of example applications. EXPAND
+The contributions of this paper are:
+
+\begin{itemize}
+\item A proposal for a distributed programming API for Haskell (Section 2). Following the Erlang model, our framework provides a system for exchanging messages between concurrent threads, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, the API provides functions for starting new threads remotely. Our framework also offers fault tolerance, again closely following the widely-respected Erlang model.
+\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section 3). The need to start threads remotely demands a representation of code objects and their environment. Our approach to closures requires explicit indication of which parts of the function's environment will be serialized and thus gives the programmer greater control over his or her application's cost model.
+\item A demonstration of the effectiveness of our approach in the form of example applications (Section 4). We provide performance measurements from the k-means clustering algorithm, an iterative algorithm for partitioning data point into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
+\end{itemize}
 
 \section{Message passing}
 
@@ -394,7 +400,7 @@ The above procedure for remotely invoking a closure seems prohibitively cumberso
 $( remotable ['add] )
 \end{code}
 
-Here, the special brackets \textt{$( )} demarcate code to be executed at compile time. The\texttt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \texttt{remotable} call will produce the following code:
+Here, the special brackets \texttt{\$( )} demarcate code to be executed at compile time. The \texttt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \texttt{remotable} call will produce the following code:
 
 \begin{code}
 -- the deserializing wrapper
