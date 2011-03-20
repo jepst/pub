@@ -27,6 +27,7 @@
 
 \usepackage{amsmath}
 \usepackage{listings}
+\usepackage{verbatim} % only for comment environment
 
 \begin{document}
 
@@ -76,7 +77,7 @@
 \newcommand{\entails}{\vdash}
 \newcommand{\hash}{\texttt{\#}}
 \newcommand{\closed}[1]{\hash\,#1}
-
+\newcommand{\textt}[1]{\lstinline!#1!}
 
 
 
@@ -142,15 +143,15 @@ The contributions of this paper are:
 \section{Processes and messages}
 
 \subsection{Processes}
-The basic unit of concurrency in our framework is the {\em process}. A process is a thread that has been ``blessed'' with the ability to send and receive messages. Processes are lightweight, having low overhead to create and run, because they are based on Haskell's \texttt{forkIO} lightweight threads, and thus unlike heavyweight OS threads, the programmer can create larger numbers of concurrent processes.
+The basic unit of concurrency in our framework is the {\em process}. A process is a thread that has been ``blessed'' with the ability to send and receive messages. Processes are lightweight, having low overhead to create and run, because they are based on Haskell's \textt{forkIO} lightweight threads, and thus unlike heavyweight OS threads, the programmer can create larger numbers of concurrent processes.
 
 Processes are identified by a unique process ID. When creating a new process, the its ID will be returned, and can be used to send messages to the new process.
 
-In most respects, our framework follows the Erlang model by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not outright prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \texttt{MVar} for shared mutable variables and \texttt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
+In most respects, our framework follows the Erlang model by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not outright prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
 
 \subsection{Messages to processes}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered. This functionality is implemented in the \texttt{ProcessM} monad, such that all the state associated with messaging (most especially, the message queue) is wrapped in that data structure, which is updated with each statement. Thus, any code participating in messaging must be in the \texttt{ProcessM} monad.
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered. This functionality is implemented in the \textt{ProcessM} monad, such that all the state associated with messaging (most especially, the message queue) is wrapped in that data structure, which is updated with each statement. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
 
 Consider a simple process that accepts ``pong'' messages and responds by sending a corresponding ``ping'' to whatever process sent the pong. Using our framework, the code for such a process would look like this:
 
@@ -179,9 +180,9 @@ ping() ->
   ping().               
 \end{code}
 
-These two programs have nearly identical structure. Both \texttt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell program matches incoming messages by type, whereas in Erlang, messages are usually pattern-matched against tuples. The programs look for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload a process ID, to which the response message is sent, this time containing the process ID of the \texttt{ping} process (given in both languages as \texttt{self}). Finally, they wait for the next message by repeating with tail recursion.
+These two programs have nearly identical structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell program matches incoming messages by type, whereas in Erlang, messages are usually pattern-matched against tuples. The programs look for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload a process ID, to which the response message is sent, this time containing the process ID of the \textt{ping} process (given in both languages as \textt{self}). Finally, they wait for the next message by repeating with tail recursion.
 
-If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \texttt{Ping} and \texttt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete, as the instance declarations have been omitted for brevity.
+If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete, as the instance declarations have been omitted for brevity.
 
 Here we present some of the important functions that form the messaging API of our framework.
 
@@ -191,9 +192,9 @@ Here we present some of the important functions that form the messaging API of o
 send :: (Serializable a) => ProcessId -> a -> ProcessM ()
 \end{code}
 
-To send a message, use \texttt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \texttt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \texttt{Serializable} type class, as well as Haskell's \texttt{Data.Binary.Binary} class, which allows the data to be converted to a form suitable for transmission. The \texttt{send} function corresponds to Erlang's \texttt{!} operator.
+To send a message, use \textt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \textt{Serializable} type class, as well as Haskell's \textt{Data.Binary.Binary} class, which allows the data to be converted to a form suitable for transmission. The \textt{send} function corresponds to Erlang's \texttt{!} operator.
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \texttt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example of this is \texttt{MVar}, Haskell's type for mutable concurrent variables. Since \texttt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a process that has no shared memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \texttt{MVar}, such a variable would have a vastly different cost model than \texttt{MVar}. Since neither \texttt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use it in that way. Nevertheless, \texttt{MVar}s can be used within a single process: processes are allowed to use Haskell's \texttt{forkIO} function to create local threads that can share memory using \texttt{MVar}.
+While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example of this is \textt{MVar}, Haskell's type for mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a process that has no shared memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model than \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use it in that way. Nevertheless, \textt{MVar}s can be used within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create local threads that can share memory using \textt{MVar}.
 
 \item 
 \begin{code}
@@ -201,13 +202,13 @@ receiveWait :: [MatchM q ()] -> ProcessM q
 match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
 \end{code}
 
-On the receiving end, \texttt{receiveWait} and \texttt{match}, which operate as a pair, examine the message queue associated with the current process and extract a received message, unpacking the transmitted chunk of data and executing an associated block of user code. Together, they correspond to Erlang's \texttt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \texttt{MatchM} type to approximate Erlang's specialized syntax. \texttt{receiveWait}'s first parameter is a list of \texttt{match} invocations, where the lambda function argument to each \texttt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \texttt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
+On the receiving end, \textt{receiveWait} and \textt{match}, which operate as a pair, examine the message queue associated with the current process and extract a received message, unpacking the transmitted chunk of data and executing an associated block of user code. Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
-In the ping example above, we use \texttt{receiveWait} and \texttt{match} to accept messages only of type \texttt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \texttt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \texttt{match} will accept messages only of type \texttt{Pong}.
+In the ping example above, we use \textt{receiveWait} and \textt{match} to accept messages only of type \textt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \textt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \textt{match} will accept messages only of type \textt{Pong}.
 \end{itemize}
 
 \subsection{Messages through channels}
-In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \texttt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
+In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \textt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
 
 Thus, an alternative to sending messages by process identifier is to use {\em typed channels}. Each distributed channel consists of two ends, which we call the {\em send port} and {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are associated with a particular type and the send port will emit messages only of that type; likewise, the receive port will accept messages only of that type, so the sender has a guarantee that its receiver is of the right type.
 
@@ -219,9 +220,9 @@ sendChannel :: (Serializable a) => SendPort a -> a -> ProcessM ()
 receiveChannel :: (Serializable a) => ReceivePort a -> ProcessM a
 \end{code}
 
-A critical point is that although \texttt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \texttt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \texttt{SendPort} an instance of \texttt{Serializable}, but not \texttt{ReceivePort}. 
+A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
 
-We can now reformulate our ping example to use typed channels. The process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \texttt{Ping} and \texttt{Pong} message now contains the send port on which its recipient should respond; thus the \texttt{Ping} message contains the send port of a channel of pongs, and the \texttt{Pong} message contains the send port of a channel of pings.
+We can now reformulate our ping example to use typed channels. The process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \textt{Ping} and \textt{Pong} message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and the \textt{Pong} message contains the send port of a channel of pings.
 
 % this might not be the best example, really
 \begin{code}
@@ -232,18 +233,18 @@ ping2 pingout pongin =
       ; ping pingout pingin }
 \end{code}
 
-How do we start the exchange? Clearly we need to create two channels and call \texttt{ping2} and \texttt{pong2} (not shown, but substantially similar to \texttt{ping2}) as new processes. But how do we start a new process?
+How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
 
-\subsection{Spawning processes}
+\subsection{Starting processes}
 
-To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains its network address and port number. So, to be able to start processes, we want a function named \texttt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \texttt{ProcessM} monad. The function should then return a process identifier, which can be used with \texttt{send}. And since the \texttt{spawn} function itself depends on messaging, it, too, will be in the \texttt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
+To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
 
 \begin{code}
 -- wrong
 spawn :: NodeId -> ProcessM () -> ProcessM ProcessId
 \end{code}
 
-In combination with the \texttt{ping} and \texttt{pong} functions, it could be used like this:
+In combination with the \textt{ping} and \textt{pong} functions, it could be used like this:
 
 \begin{code}
 -- wrong
@@ -252,11 +253,11 @@ do { pingProc <- spawn someNode ping
    ; send pingProc (Pong pongProc) }
 \end{code}
 
-The above example is supposed to start two new processes on \texttt{someNode} and \texttt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial message to the ping process.
+The above example is supposed to start two new processes on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial message to the ping process.
 
-To understand why this version of \texttt{spawn} is wrong, consider how to implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \texttt{spawn} can be implemented using \texttt{send}.  \texttt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \texttt{spawn}. In the above case, the call to \texttt{spawn} would send a message containing the function \texttt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \texttt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
+To understand why this version of \textt{spawn} is wrong, consider how to implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \textt{spawn} can be implemented using \textt{send}.  \textt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \textt{spawn}. In the above case, the call to \textt{spawn} would send a message containing the function \textt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \textt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
 
-The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of the free names used by the \texttt{ping} function, such as \texttt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value of top-level names, as we know that they already exist at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
+The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value of top-level names, as we know that they already exist at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
 
 \begin{code}
 -- wrong
@@ -267,22 +268,22 @@ printSumSomewhere aNode i =
    in spawn aNode fun
 \end{code}
 
-This function accepts a location, given as a \texttt{NodeId}, and an integer \texttt{i}, and should remotely run the function \texttt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \texttt{nums} is a free variable in \texttt{fun}, but is not top-level. Furthermore, \texttt{nums} depends on \texttt{i}, which is also not top-level. Therefore, to be able to run \texttt{fun} on a remote node, the local value of \texttt{nums}, or at least \texttt{i}, would need to be serialized and transmitted along with the representation of \texttt{fun}.
+This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
 
-There are a few reasons why we don't want to automatically transmit the whole of \texttt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \texttt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables, as well. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables, as well. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
 
-Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \texttt{i} may be serialized, even though it isn't mentioned in \texttt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
+Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
 
-Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \texttt{fun}'s environment be serialized? One way would be for the value of \texttt{nums} to be sent. Another way would be for the value of \texttt{i} to be sent, along with a representation of \texttt{nums} that depends on the value of \texttt{i}. In the first option, depending on the size of \texttt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \texttt{nums} remotely. There are several possible ways a language could balance these trade-offs, but the answer is likely to be somewhat arbitrary and not transparent to the programmer. This is another case where the programmer loses control of the cost model, and, again, we aimed for a more explicit interface.
+Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. There are several possible ways a language could balance these trade-offs, but the answer is likely to be somewhat arbitrary and not transparent to the programmer. This is another case where the programmer loses control of the cost model, and, again, we aimed for a more explicit interface.
 
 In our framework, a captured environment is never transmitted implicitly. We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
 
 \subsection{Fault tolerance}
-We aimed to follow as closely as possible Erlang's model for fault tolerance. Erlang's \texttt{link} and \texttt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
+We aimed to follow as closely as possible Erlang's model for fault tolerance. Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
 
 Our fault tolerance API is based on the idea that a process can monitor another process. If the monitored process terminates, the other process will be notified, and can take appropriate action. We provide relatively only low-level functions that allow for notification of possible faults. Actually recovering from faults is left to the application or a higher-level framework, such as the one briefly discussed in the Future work section.
 
-A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving that process. A fault that will result in a notification can be caused either by the other process being terminated as a result of an uncaught exception, or if the node on which the process is running becomes inaccessible. The monitoring process can also indicate to be notified in one of two ways: either by an asynchronous exception, which can be caught with Haskell's usual exception handling mechanisms; or by message, which can be received using the \texttt{receiveWait} function.
+A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving that process. A fault that will result in a notification can be caused either by the other process being terminated as a result of an uncaught exception, or if the node on which the process is running becomes inaccessible. The monitoring process can also indicate to be notified in one of two ways: either by an asynchronous exception, which can be caught with Haskell's usual exception handling mechanisms; or by message, which can be received using the \textt{receiveWait} function.
 
 Here are the functions for setting up process monitoring:
 
@@ -291,20 +292,17 @@ monitorProcess :: ProcessId -> ProcessId -> MonitorAction -> ProcessM ()
 linkProcess :: ProcessId -> ProcessM ()
 \end{code}
 
-\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \texttt{a} will be notified if process \texttt{b} terminates. The third argument determines whether the monitoring process will be notified by exception or by message.
+\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process will be notified by exception or by message.
 
-\texttt{linkProcess} corresponds to Erlang's \texttt{link}. It establishes bidirectional process monitoring between the current process and a given process; if either of those processes terminate abnormally, the other will receive an asynchronous exception. \texttt{linkProcess} is defined in terms of \texttt{monitorProcess}. 
+\textt{linkProcess} corresponds to Erlang's \textt{link}. It establishes bidirectional process monitoring between the current process and a given process; if either of those processes terminate abnormally, the other will receive an asynchronous exception. \textt{linkProcess} is defined in terms of \textt{monitorProcess}. 
 
 
 
 
 
 \section{Closures}
-there's no way for a library to know what to transmit, or even if it's serializable. Clearly, we don't want to prevent remotely-invocable functions from ever using non-serializable data. That would mean that any function that could be started using \texttt{spawn} wouldn't be allowed to use \texttt{MVar}.
-
-explicit transmission of environment; third party code
-
-lambda lift
+\begin{comment}
+there's no way for a library to know what to transmit, or even if it's serializable. Clearly, we don't want to prevent remotely-invocable functions from ever using non-serializable data. That would mean that any function that could be started using \textt{spawn} wouldn't be allowed to use \textt{MVar}.
 
 all parameters to closure must be serializable
 
@@ -318,147 +316,143 @@ serializing environments would be messy to implement is also valid.
 only local and global names are visible in a top-level function. This is a reasonable approximation because all toplevel names are always available on all hosts and never need to be transmitted
 
 prevention of sharing bad things (e.g. mvars, receiveports) is enforced by the serializer
+\end{comment}
 % ----------------------------------------------- BEGIN ANDREW
 
 To provide explicit control over which data accompanies a remote function invocation, we use {\em closures}. For our purposes, a closure is a data structure that encapsulates both a representation of a function and its environment. Including the environment is especially important in a language like Haskell, where so much of the power of higher-order functions rests in their ability to accept functions that do capture local names, but we also want to prevent the programmer from accidentally transmitting an unnecessarily large environment.
 
 What restrictions should we apply and how can we enforce them?
 
+To illustrate our quest for a mechanism for remote function invocation, we introduce the function \textt{callPure}, a variation of \textt{spawn} that has this type:
+
 \subsection{Closures in theory}
 
-Let's consider a few different functions, and for each, we'll decide if it's a function that we should be allowed to invoke remotely using \texttt{spawn}. 
+As we discussed in section 2.4, serializing functions that have free variables is problematic. We want to avoid the issue of automatically serializing potentially large chunks of the function's environment, possibly without the programmer's awareness. We can't just restrict serializable functions to those that have no free names, though, as even the most innocent function is likely to have at least one. Consider this straightforward function:
 
 \begin{code}
-f1 :: Int -> Int
-f1 x = x + 1
+greet :: String -> ProcessM ()
+greet name = liftIO (putStrLn ("Hi, " ++ name))
 \end{code}
 
-The function \texttt{f1} is clearly okay to be spawned remotely. It doesn't have any free variables other than \lstinline!(+)!, which is top-level and therefore guaranteed to be available on the other side. In order to call \texttt{f1}, we need to send its integer parameter, as well.
+In \textt{greet}, \textt{liftIO}, \textt{putStrLn} and \lstinline!(++)! are free names. Nevertheless, we feel that we should be able to run this function on a remote system using our (wrong) first attempt at \textt{spawn}:
 
 \begin{code}
-f2 :: 
+-- wrong
+spawn someNode (greet "Jaroslav")
 \end{code}
 
-We posit a new attribute of names, orthogonal to their type. function constructor as a building-block: $v \nfn a$ is the type of all functions from $v$ to $a$ that either have no free variables at all, or all of whose free variables are bound in the environment to other $\nfn$ functions. We will call these restricted functions {\em closed functions}. Such functions are easy to serialize; conceptually, we can send pure code; if we know that the code is already at the destination, we can send a symbolic reference to the code that is already there.  
-
-Closed functions are introduced using a new form of abstraction, which we will write $\nlambda$, and eliminated using a new form of application, which we will write as an infix $\napp$ (and pronounce ``hash-apply'').
-
-Note that primitive functions like $(+)$ are closed functions, and that closed functions can have ordinary $\rightarrow$ functions inside them.  
-
-Let us try and formalize this notion of closed function.  
-When creating a closed function, we need a way of specifying that the free variables of the expression that forms the body of the function can access only other closed functions (and the $\lambda$-bound variable).  We do this by defining a syntactic function \closed{} on environments that strips-out other definitions.  We define \closed{} recursively by cases:
-
-\begin{align*}
-	\closed (\Gamma , x: \tau_1 \nfn \tau_2) 		=& ~ \closed \Gamma , x: \tau_1 \nfn \tau_2 \\
-	\closed (\Gamma , x: \tau)						=& ~ \closed \Gamma   \\
-	\closed \varepsilon 								=& ~ \varepsilon 
-\end{align*}
-
-for any $\tau$ \emph{not} of the form $\tau_1 \nfn{} \tau_2$ and
-where $\varepsilon$ denotes the empty environment.
-
-Primitive functions, placed into $\Gamma$ by the standard prelude, have \nfn{} types, so remain in $\closed{\Gamma}$.
-It would also be safe to allow identifiers that are bound to literal constants to remain in $\closed{\Gamma}$, but not  identifiers that are bound to
-arbitrary expressions, since those expressions may be represented by thunks, which might have free variables.  Unfortunately, because the Haskell type system doesn't distinguish the two, we can't make $\closed$ filter out one but not the other without more extensive changes.
-
-Now we can specify the typing rules for closed function introduction and elimination. 
-
-\begin{equation*}
-\tag{\nfn~intro.}
-\frac{\closed{\Gamma}, x : \tau_1 \entails e : \tau_2}
-		{\Gamma \entails (\nlambda x.e) : \tau_1 \nfn \tau_2}
-\end{equation*}
-
-
-\begin{equation*}
-\tag{\nfn~elim.}
-\frac{\Gamma \entails e : \tau_1 ~~~~ \Gamma \entails f : \tau_1  \nfn \tau_2}
-		{\Gamma \entails (f \napp e) : \tau_2}
-\end{equation*}
-
-
-This lets us use closed functions to represent closures explicitly: a function with free variables can be converted into a closed function by converting its free variables into explicit arguments.
-
-We can capture this idea in a datatype that we will call a \ct{Clo}, because it represents a closure.
-\begin{align*}
-\ct{data}~&\ct{Clo}~\ct{b}~\ct{where}\\
-				 	&\sf Clo :: \sf (rep \nfn b) \rightarrow rep \rightarrow Clo~b
-\end{align*}
-
-\texttt{Clo fun argList} packages up computation that will eventually compute a value of type $b$, where $b$ is the return type of the function \texttt{fun}.  
-\texttt{fun}'s free variables have been turned into parameters, so we have to pass those parameters along, in \texttt{argList}, as part of the closure.  
-Notice that the type of the argument to \texttt{fun} (which I called \texttt{rep}), and of \texttt{argList}, must be the same.
-Moreover, in the abstract, no one else need care exactly what \texttt{rep} is: in essence, it is an existential type.
-
-However, in the concrete, ``someone else'' does have to care: the serialization machinery needs a way of unserializing the \texttt{rep}.  
-You might think that the compiler knows what \texttt{rep} is, but this turns out not to be the case. 
-The compiler does indeed know the principle type, but, because of existential types that may be buried deep within \ct{rep}, it does not in general know the 
-actual instance type. Neither can we generate the deserialization code dynamically, because Haskell does not maintain any type information at run-time. We are then presented with the two problems of how to concretely represent the closed function and environment in Haskell.
-
-% ---------------------------------------------------- END ANDREW
-
-\subsection{Closures in practice}
-
-Once we've collected all of a functions free variables, serializing them is easy: we can use Haskell's \texttt{Data.Binary} module to convert ordinary data into a \texttt{ByteString}. This is fine, since ultimately our whole message will be converted into a \texttt{ByteString} for transmission to the remote host. We are now one step closer to a working closure. Our current version looks like this:
-
-\begin{align*}
-\ct{data}~\ct{Clo}~\ct{b}~\ct{where}&\\
-\ct{Clo}::&(\ct{ByteString} \nfn \ct{b}) \rightarrow \ct{ByteString} \rightarrow \ct{Clo}~\ct{b}
-\end{align*}
-
-The closed function, then, must accept its environment as a \texttt{ByteString}. It is ultimately only the function itself that knows the type of environment that it expects, and this information cannot be extracted at runtime.
-
-Now, to the question of how to find a serializable representation for a closed function $\ct{ByteString} \nfn b$. There are a few possible answers to the question of what it means to represent a function. The goal of serializing a function is to be able to eventually deserialize and run the function. One way to achieve this would be to transmit the code of the function itself, either as source code or in some compiled form; these are solutions not well suited to a language that compiles to machine code, as we'd ideally like to run our application on a heterogeneous network. Alternatively, we might serialize a function as a unique identifier, under the condition that we know that the code already exists at the destination node and we can map the identifier to the code that it identifies; in some environments the unique identifier might be a pointer or the name of the function. And whichever form of representation we use, we need to be able to enforce the requirements of the closed function, i.e. no free variables that aren't included in the environment. Ideally, we'd like to be able to do this without extended the language.
-
-Fortunately, Haskell already offers us a way to ensure that a function doesn't capture names from its environment: top-level functions are guaranteed to be able to see only other top-level functions. Even better, if the same code is running on all nodes, then such functions will have an easily accessible, unique identifier: the fully-qualified name, consisting of module and function name. So, if we restrict the set of serializable functions to top-level functions, we have a simple way to approximate the requirements of closed functions. Our approximation is a little overly restrictive, as we won't be able to find representations for those functions that are closed but not top-level. In practice, this is only a minor inconvenience.
-
-So, the implementation of our \texttt{Clo} data structure now looks like this:
+We'd also like to be able to run remotely functions that don't have side effects. Consider \textt{call}, a variation of \textt{spawn} that takes a location and an unevaluated expression, computes its value remotely, and returns it.
 
 \begin{code}
-data Clo b = Clo String ByteString
+-- also wrong
+call :: (Serializable a) => NodeId -> a -> ProcessM a
 \end{code}
 
-In other words, a closure consists of a \texttt{String}, which is the fully-qualified name of a top-level function of type \lstinline!ByteString -> b!, and a \texttt{ByteString}, which is a serialized representation of a tuple containing the parameters to that function. As a concrete example, let's consider a program to add two numbers on a remote host. The function in question is:
+Ideally, we'd like to use \textt{call} like this, even though \textt{add} captures the free name \lstinline!(+)!:
 
 \begin{code}
 add :: Int -> Int -> Int
-add = (+)
+add a b = a + b
+
+-- wrong
+res <- call someNode (add 3 4)
 \end{code}
 
-Now we need a ``wrapper'' version of this function that accepts a \texttt{ByteString}:
+Clearly, the given signature for \textt{call} is wrong, since Haskell's lazy evaluation doesn't let us syntactically distinguish between  unevaluated and evaluated values, so the programmer doesn't have control over which computer the given expression would be computed on. What we want is a representation of a call to \textt{add} function that is distinct from actually calling it.
+
+In order to construct a representation of functions, we posit a new attribute of names, orthogonal to their type. A name is {\em staticable} if either it is a top-level name or all its free variables are staticable. We denote the context of staticable names as:
+
+\begin{align*}
+\Gamma\downarrow = \{ x:_{s} \sigma \mid x :_{s} \sigma \in \Gamma \}
+\end{align*}
+
+To use the names denoted as staticable, we furthermore posit a special \lstinline!Static a! type that can wrap only staticable types. It has a type constructor, \lstinline!Static!, and the wrapped value can be extracted using the \textt{unStatic} function:
+
+\begin{equation*}
+\tag{Static~intro.}
+\frac{\Gamma\downarrow~\entails e :_{s} \tau}
+     {\Gamma \entails \text{Static}~e : \text{Static}~\tau}
+\end{equation*}
+
+
+\begin{equation*}
+\tag{Static~elim.}
+\frac{\Gamma \entails e : \text{Static}~\tau}
+     {\Gamma \entails \text{unStatic}~e : \tau}
+\end{equation*}
+
+Now let us turn to the question of how to represent a function's environment. The names used in a function will fall into one of these categories:
+
+\begin{enumerate}
+\item Top-level names. We don't need to transmit these values, because we know that they exist on the remote system.
+\item Parameter names. These values must be provided by the caller, and therefore must be transmitted to the remote system.
+\item Local, non-top-level names. These values need to be present on the remote system, but for the reasons explained in section 2.4, we don't want to let the framework implicitly transmit them. If the programmer wants to explicitly include elements of a local environment in the remote function invocation, he or she can use the technique of {\em lambda lifting} \cite{lambdalifting} to convert the local names into parameters. % explain this here
+\item Names defined within the function. These does need to be transmitted, as their values will be constructed by the function itself.
+\end{enumerate}
+
+We have reduced the problem of serializing the function's environment into the problem of serializing the function's parameters. So implementing functions like \textt{spawn} and \textt{call} should be a matter of packaing up the \textt{Static} function representation and its arguments, serializing them, sending them over the wire, deserializing the function representation and arguments, \textt{unStatic}-ing the function, and applying the arguments. We can imagine a {\em closure} data type that encapsulates both the function representation and an encoding of its environment:
 
 \begin{code}
-module Main where
-add_wrap :: ByteString -> Int
-add_wrap bs = let (i1, i2) = decode bs
-               in add i1 i2
+-- wrong
+data Closure a = Closure (Static (env -> a)) env
 \end{code}
 
-Here we're using Haskell's \texttt{Data.Binary.decode} function to convert the serialized environment into a tuple containing the parameters to the \texttt{add} function. Haskell's type inference will make sure that the \texttt{ByteString} is deserialized to the right type. Now that we have the wrapper, we can construct a closure and pass it to spawn:
+A \textt{Closure a} packages up computation that will eventually compute a value of type \textt{b}, where \textt{b} is the return type of the function to invoke. That function's free variables have been turned into parameters, so we have to pass those parameters along as part of the closure, encoded as a type \textt{env}. Naturally, the parameters themselves must also be serializable. Note that the type of the parameters must match the input to the function. Concretely, we can imagine that \textt{env} is a tuple of the function's arguments. For example, a closure for the \textt{add} function might be written as \textt{Closure (Static add) (3, 4)}.
+
+There is a wrinkle in this strategy, though, and that is that that type information about the closure is lost during serialization. The \textt{decode} function that we use to deserialize the \textt{Closure} after transmission requires that its type be known {\em a priori}. Unfortunately, the type of both the function and its environment is not available on the other side, and so we can't deserialize the closure. Even if we could, we couldn't call the function because we don't know the type of \textt{env}. This is because information about Haskell's types is not available at run-time. How, then, can we call a function with parameters, when we don't know their type?
+
+The solution is to require the represented function itself to deserialize its own parameters. The same serialization mechanism that converts the Closure as a whole into a transmission-ready form can be applied to the function's tupled parameters. Haskell conveniently provides \textt{encode} and \textt{decode} functions in the \textt{Data.Binary} module which are able to convert any \textt{Serializable} data into a \textt{ByteString} and vice versa. So, we propose a revised version of our \textt{Closure} type:
 
 \begin{code}
--- correct, finally!
-let addEnv = encode (5, 12)
-    addClo = Clo "Main.add_wrap" addEnv
- in spawn aNode addClo
+-- correct, but impractical
+data Closure a = Closure (Static (ByteString -> a)) ByteString
 \end{code}
 
-The \texttt{Data.Binary.encode} function is the counterpart to \texttt{decode}, used above, and converts the tuple into a \texttt{ByteString}. The closure is constructed with the function's environment and name of the (closed) wrapper function, which will in turn call the underlying function. The whole closure is then given to \texttt{spawn}, which can send the closure in a message to the remote host.
+We have replaced the tuple \textt{rep} in the earlier version with a concrete type, \textt{ByteString}, that represents an encoding of the function parameters. The first job of the function, then, will be to call \textt{decode} to get their values. The function can do this, while the framework cannot, because the framework doesn't know what type to deserialize the \textt{ByteString} into. It is ultimately only the function itself that knows the type of environment that it expects, and this information cannot be extracted at runtime.
 
-And how will the closure be invoked on the other end of the wire? The receiving node needs a table mapping function names to their implementations. It's sufficient to call the right function with the \texttt{ByteString} given in the closure.
+This procedure of encoding and decoding function arguments is safe, even if by some accident the function tries to decode its arguments into the wrong type. In that case, \textt{decode} will throw an exception that is caught by the framework and passed back to the initiator.
 
-What can happen if something goes wrong? What, for example, will happen if we have different code on the two sides of communication? If the function named in the closure doesn't exist on the other side, looking it up in the function table will fail, and \texttt{spawn} can report the error to the programmer. More insidiously, what if a function of the same name exists, but with a different environment? In this case, depending on how the types differs, it's possible for the environment's deserialization to not fail, but to succeed by extracting incorrect values from the \texttt{ByteString}, which is worse than failing. We can eliminate this risk by including by including a representation of the environment type in the closure, and checking this type against the expected type on the remote end.
+If we assume that the language provides a serializable representation of all \textt{Static} types (that is, \textt{Static a} is an instance of \textt{Serializble}), our new definition of \textt{Closure} is sufficient to implement \textt{spawn} and \textt{call}, which now have the following types:
+
+\begin{code}
+-- correct!
+spawn :: NodeId -> Closure (ProcessM ()) -> ProcessM ProcessId
+call :: (Serializable a) => NodeId -> Closure a -> ProcessM a
+\end{code}
+
+Unfortunately, our consideration of the \textt{Static} type and its dependence on a notion of staticability requires extensions to the underlying language, and Haskell does not currently provide these extensions. How, then, to proceed?
+
+\subsection{Closures in practice}
+
+Our definition in the previous section allows a serializable representation of any staticable function, where a staticable function is a top-level function or a function whose free variables are staticable. A reasonable approximation of the set of staticable functions is the set of top-level functions, and as it turns out, providing serializable representations of any top-level function is a much easier goal than providing serializable representations of any staticable function; in fact, with this minor restriction, we are able to implement this feature, and the closures that depend on it, without extending the language. Furthermore, we feel that limiting serializability to top-level functions isn't a major additional restriction, since any staticable function can be trivially made top-level. Finally, top-level functions are all automatically staticable and cannot capture non-staticable names from their environment, and so are guaranteed to be safe to serialize.
+
+The difficult part of function representation is that whatever identifier we use for a particular function must be unique and recognizable on both sides of the communication. Function pointers, while useful for representing functions on a single system, aren't a valid option in a distributed environment, since the remote system might have a different pointer width, and even if it doesn't variations in compiler and operating system render function pointers incomparable between computers. If we could select a unique identifier for each serializable function and transmit that identifier in place of the function itself, the receiving end would only need to map the identifier back to the original function, and we will have achieved our goal of transmitting a function representation. Such an identifier could take the place of the \textt{Static} type in \textt{Closure}s.
+
+Fortunately, since we've restricted the set of serializable functions to top-level functions, we already have a convenient, globally unique identifier for each such function: its fully-qualified name. Here, a fully-qualified name consists of the module in which the function is defined and the name of the function, separated by a period. We can now consider yet another version of the \textt{Closure} data structure:
+
+\begin{code}
+-- correct!
+data Closure a = Closure String ByteString
+\end{code}
+
+We've replaced the theoretical \textt{Static} type wrapper with a string, which stores the fully-qualified name of the represented function. Its parameters remain encoded as a \textt{ByteString}. Note that the function named by the string must have type \textt{ByteString -> a}. Before we can make this version of \textt{Closure} work, though, we need a way of mapping functions to their names, and those names back to the original function. This is not trivial, since Haskell does not provide run-time name lookup services.
+
+We must provide a name lookup service ourselves. 
+
+
+
+What can happen if something goes wrong? What, for example, will happen if we have different code on the two sides of communication? If the function named in the closure doesn't exist on the other side, looking it up in the function table will fail, and \textt{spawn} can report the error to the programmer. More insidiously, what if a function of the same name exists, but with a different environment? In this case, depending on how the types differs, it's possible for the environment's deserialization to not fail, but to succeed by extracting incorrect values from the \textt{ByteString}, which is worse than failing. We can eliminate this risk by including a representation of the environment type in the closure, and checking this type against the expected type on the remote end. In our implementation, we package the \textt{ByteString} of the function's environment along with a string representation of the environment's type.
 
 
 \subsection{Closures, with sugar}
 
-The above procedure for remotely invoking a closure seems prohibitively cumbersome. Fortunately, the Template Haskell facility lets us generate some sugar for all this which simplifies the procedure greatly. Template Haskell provides compile-time rewriting facilities that let us remove much of the tedium of writing wrapper functions. Our framework includes a compile-time \texttt{remotable} function that operates on groups of Haskell function names and automatically produces wrapper functions and closure-generators that can be used with \texttt{spawn}. Let's revisit the \texttt{add} example from above. The programmer can request generation of the requisite stub functions using this syntax:
+The above procedure for remotely invoking a closure seems prohibitively cumbersome. Fortunately, the Template Haskell facility lets us generate some sugar for all this which simplifies the procedure greatly. Template Haskell provides compile-time rewriting facilities that let us remove much of the tedium of writing wrapper functions. Our framework includes a compile-time \textt{remotable} function that operates on groups of Haskell function names and automatically produces wrapper functions and closure-generators that can be used with \textt{spawn}. Let's revisit the \textt{add} example from above. The programmer can request generation of the requisite stub functions using this syntax:
 
 \begin{code}
 $( remotable ['add] )
 \end{code}
 
-Here, the special brackets \texttt{\$( )} demarcate code to be executed at compile time. The \texttt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \texttt{remotable} call will produce the following code:
+Here, the special brackets \textt{\$( )} demarcate code to be executed at compile time. The \textt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \textt{remotable} call will produce the following code:
 
 \begin{code}
 -- the deserializing wrapper
@@ -475,7 +469,7 @@ add__closure i2 i2 = let bs = encode (i1, i2)
 __remoteCallMetaData = putReg "Main.add__impl" add__impl
 \end{code}
 
-Now, when the programmer wants to remotely invoke \texttt{add}, all that's necessary is to use \texttt{add\_\_closure} in place of \texttt{add}:
+Now, when the programmer wants to remotely invoke \textt{add}, all that's necessary is to use \textt{add\_\_closure} in place of \textt{add}:
 
 \begin{code}
 spawn aNode (add__closure 5 12)
@@ -483,7 +477,7 @@ spawn aNode (add__closure 5 12)
 
 Notice that this syntax isn't very far from blah blah
 
-The underlying machinery takes care of the rest. \texttt{add\_\_closure} serializes its arguments and returns a closure pointing to the closed function \texttt{add\_\_impl}. When the closure the received by the remote host, the code corresponding the string \texttt{"add\_\_impl"} can be looked up in \texttt{\_\_remoteCallMetaData}, and \texttt{add\_\_impl} will be called, given the serialized environment as a parameter. Because \texttt{add\_\_impl} was generated bespoke for \texttt{add}, it knows how to deserialize the environment and call the right implementation.
+The underlying machinery takes care of the rest. \textt{add\_\_closure} serializes its arguments and returns a closure pointing to the closed function \textt{add\_\_impl}. When the closure the received by the remote host, the code corresponding the string \textt{"add\_\_impl"} can be looked up in \textt{\_\_remoteCallMetaData}, and \textt{add\_\_impl} will be called, given the serialized environment as a parameter. Because \textt{add\_\_impl} was generated bespoke for \textt{add}, it knows how to deserialize the environment and call the right implementation.
 
 \begin{itemize}
 \item local processes (with capture) vs. remote processes (without)
@@ -499,7 +493,7 @@ The underlying machinery takes care of the rest. \texttt{add\_\_closure} seriali
 \section{Implementation}
 Erlang has a nice feature that allows program modules to be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without even having to restart the application. We decided not to go in this direction with our framework, partly because code update is a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, where Erlang's bytecode interpreter retains more control over the loading and execution of programs.
 
-A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \texttt{scp} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializer.
+A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializer.
 
 \begin{itemize}
 \item based on Haskell's lightweight threads  and stm
