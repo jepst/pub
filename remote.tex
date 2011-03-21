@@ -246,8 +246,6 @@ How do we start the exchange? Clearly we need to create two channels and call \t
 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
-\caption{A summary of the API.}
-
 \textbf{Basic messaging} 
 \begin{code}
 send :: (Serializable a) => ProcessId -> a -> ProcessM ()
@@ -309,6 +307,7 @@ class (Binary a,Typeable a) => Serializable a
 class Typeable a where typeOf :: a -> TypeRep
 class Binary t where put :: t -> Put; get :: Get t
 \end{code}
+\caption{A summary of the API} \label{fig:api}
 \end{figure}
 
 To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
@@ -641,118 +640,121 @@ Section~\ref{sect:th}.  But it has the great merit that it makes
 crystal clear exactly what is serialised, and when.  
 
 % ----------------------------------------------- BEGIN ANDREW
+% 
+% To provide explicit control over which data accompanies a remote function invocation, we use {\em closures}. For our purposes, a closure is a data structure that encapsulates both a representation of a function and its environment. Including the environment is especially important in a language like Haskell, where so much of the power of higher-order functions rests in their ability to accept functions that do capture local names, but we also want to prevent the programmer from accidentally transmitting an unnecessarily large environment.
+% 
+% What restrictions should we apply and how can we enforce them?
+% 
+% To illustrate our quest for a mechanism for remote function invocation, we introduce the function \textt{callPure}, a variation of \textt{spawn} that has this type:
+% 
+% \subsection{Closures in theory}
+% 
+% As we discussed in section 2.4, serializing functions that have free variables is problematic. We want to avoid the issue of automatically serializing potentially large chunks of the function's environment, possibly without the programmer's awareness. We can't just restrict serializable functions to those that have no free names, though, as even the most innocent function is likely to have at least one. Consider this straightforward function:
+% 
+% \begin{code}
+% greet :: String -> ProcessM ()
+% greet name = liftIO (putStrLn ("Hi, " ++ name))
+% \end{code}
+% 
+% In \textt{greet}, \textt{liftIO}, \textt{putStrLn} and \lstinline!(++)! are free names. Nevertheless, we feel that we should be able to run this function on a remote system using our (wrong) first attempt at \textt{spawn}:
+% 
+% \begin{code}
+% -- wrong
+% spawn someNode (greet "Jaroslav")
+% \end{code}
+% 
+% We'd also like to be able to run remotely functions that don't have side effects. Consider \textt{call}, a variation of \textt{spawn} that takes a location and an unevaluated expression, computes its value remotely, and returns it.
+% 
+% \begin{code}
+% -- also wrong
+% call :: (Serializable a) => NodeId -> a -> ProcessM a
+% \end{code}
+% 
+% Ideally, we'd like to use \textt{call} like this, even though \textt{add} captures the free name \lstinline!(+)!:
+% 
+% \begin{code}
+% add :: Int -> Int -> Int
+% add a b = a + b
+% 
+% -- wrong
+% res <- call someNode (add 3 4)
+% \end{code}
+% 
+% Clearly, the given signature for \textt{call} is wrong, since Haskell's lazy evaluation doesn't let us syntactically distinguish between  unevaluated and evaluated values, so the programmer doesn't have control over which computer the given expression would be computed on. What we want is a representation of a call to \textt{add} function that is distinct from actually calling it.
+% 
+% In order to construct a representation of functions, we posit a new attribute of names, orthogonal to their type. A name is {\em staticable} if either it is a top-level name or all its free variables are staticable. We denote the context of staticable names as:
+% 
+% \begin{align*}
+% \Gamma\downarrow = \{ x:_{s} \sigma \mid x :_{s} \sigma \in \Gamma \}
+% \end{align*}
+% 
+% To use the names denoted as staticable, we furthermore posit a special \lstinline!Static a! type that can wrap only staticable types. It has a type constructor, \lstinline!Static!, and the wrapped value can be extracted using the \textt{unStatic} function:
+% 
+% \begin{equation*}
+% \tag{Static~intro.}
+% \frac{\Gamma\downarrow~\entails e :_{s} \tau}
+%      {\Gamma \entails \text{Static}~e : \text{Static}~\tau}
+% \end{equation*}
+% 
+% 
+% \begin{equation*}
+% \tag{Static~elim.}
+% \frac{\Gamma \entails e : \text{Static}~\tau}
+%      {\Gamma \entails \text{unStatic}~e : \tau}
+% \end{equation*}
+% 
+% Now let us turn to the question of how to represent a function's environment. The names used in a function will fall into one of these categories:
+% 
+% \begin{enumerate}
+% \item Top-level names. We don't need to transmit these values, because we know that they exist on the remote system.
+% \item Parameter names. These values must be provided by the caller, and therefore must be transmitted to the remote system.
+% \item Local, non-top-level names. These values need to be present on the remote system, but for the reasons explained in section 2.4, we don't want to let the framework implicitly transmit them. If the programmer wants to explicitly include elements of a local environment in the remote function invocation, he or she can use the technique of {\em lambda lifting} \cite{lambdalifting} to convert the local names into parameters. % explain this here
+% \item Names defined within the function. These does need to be transmitted, as their values will be constructed by the function itself.
+% \end{enumerate}
+% 
+% We have reduced the problem of serializing the function's environment into the problem of serializing the function's parameters. So implementing functions like \textt{spawn} and \textt{call} should be a matter of packaing up the \textt{Static} function representation and its arguments, serializing them, sending them over the wire, deserializing the function representation and arguments, \textt{unStatic}-ing the function, and applying the arguments. We can imagine a {\em closure} data type that encapsulates both the function representation and an encoding of its environment:
+% 
+% \begin{code}
+% -- wrong
+% data Closure a = Closure (Static (env -> a)) env
+% \end{code}
+% 
+% A \textt{Closure a} packages up computation that will eventually compute a value of type \textt{b}, where \textt{b} is the return type of the function to invoke. That function's free variables have been turned into parameters, so we have to pass those parameters along as part of the closure, encoded as a type \textt{env}. Naturally, the parameters themselves must also be serializable. Note that the type of the parameters must match the input to the function. Concretely, we can imagine that \textt{env} is a tuple of the function's arguments. For example, a closure for the \textt{add} function might be written as \textt{Closure (Static add) (3, 4)}. Upon receiving this \textt{Closure Int}, the remote system can call \textt{unClosure}, which will invoke the function and give its result:
+% 
+% \begin{code}
+% -- wrong
+% unClosure :: Closure a -> a
+% \end{code}
+% 
+% There is a wrinkle in this strategy, though, and that is that that type information about the closure is lost during serialization. The \textt{decode} function that we use to deserialize the \textt{Closure} after transmission requires that its type be known {\em a priori}. Unfortunately, the type of both the function and its environment is not available on the other side, and so we can't deserialize the closure. Even if we could, we couldn't call the function because we don't know the type of \textt{env}. This is because information about Haskell's types is not available at run-time. How, then, can we call a function with parameters, when we don't know their type?
+% 
+% Our initial attempt at addressing this problem was to include a second function representation within the closure. This second function would have the sole task of deserializing the arguments to the correct type and then invoking the real function. We eventually realized that this could be simplified: there's no need to have two functions, when they can combined.
+% 
+% The solution is to require the represented function itself to deserialize its own parameters. The same serialization mechanism that converts the Closure as a whole into a transmission-ready form can be applied to the function's tupled parameters. Haskell conveniently provides \textt{encode} and \textt{decode} functions in the \textt{Data.Binary} module which are able to convert any \textt{Serializable} data into a \textt{ByteString} and vice versa. So, we propose a revised version of our \textt{Closure} type:
+% 
+% \begin{code}
+% -- correct, but impractical
+% data Closure a = Closure (Static (ByteString -> a)) ByteString
+% \end{code}
+% 
+% We have replaced the tuple \textt{rep} in the earlier version with a concrete type, \textt{ByteString}, that represents an encoding of the function parameters. The first job of the function, then, will be to call \textt{decode} to get their values. The function can do this, while the framework cannot, because the framework doesn't know what type to deserialize the \textt{ByteString} into. It is ultimately only the function itself that knows the type of environment that it expects, and this information cannot be extracted at runtime.
+% 
+% This procedure of encoding and decoding function arguments is safe, even if by some accident the function tries to decode its arguments into the wrong type. In that case, \textt{decode} will throw an exception that is caught by the framework and passed back to the initiator. We have essentially built a dynamic type system on top of Haskell's static type system in order to facilitate remote function invocation.
+% 
+% If we assume that the language provides a serializable representation of all \textt{Static} types (that is, \textt{Static a} is an instance of \textt{Serializble}), our new definition of \textt{Closure} is sufficient to implement \textt{spawn} and \textt{call}, which now have the following types:
+% 
+% \begin{code}
+% -- correct!
+% spawn :: NodeId -> Closure (ProcessM ()) -> ProcessM ProcessId
+% call :: (Serializable a) => NodeId -> Closure a -> ProcessM a
+% \end{code}
+% 
+% 
 
-To provide explicit control over which data accompanies a remote function invocation, we use {\em closures}. For our purposes, a closure is a data structure that encapsulates both a representation of a function and its environment. Including the environment is especially important in a language like Haskell, where so much of the power of higher-order functions rests in their ability to accept functions that do capture local names, but we also want to prevent the programmer from accidentally transmitting an unnecessarily large environment.
+\section{Mapping statics and closures onto GHC}
 
-What restrictions should we apply and how can we enforce them?
-
-To illustrate our quest for a mechanism for remote function invocation, we introduce the function \textt{callPure}, a variation of \textt{spawn} that has this type:
-
-\subsection{Closures in theory}
-
-As we discussed in section 2.4, serializing functions that have free variables is problematic. We want to avoid the issue of automatically serializing potentially large chunks of the function's environment, possibly without the programmer's awareness. We can't just restrict serializable functions to those that have no free names, though, as even the most innocent function is likely to have at least one. Consider this straightforward function:
-
-\begin{code}
-greet :: String -> ProcessM ()
-greet name = liftIO (putStrLn ("Hi, " ++ name))
-\end{code}
-
-In \textt{greet}, \textt{liftIO}, \textt{putStrLn} and \lstinline!(++)! are free names. Nevertheless, we feel that we should be able to run this function on a remote system using our (wrong) first attempt at \textt{spawn}:
-
-\begin{code}
--- wrong
-spawn someNode (greet "Jaroslav")
-\end{code}
-
-We'd also like to be able to run remotely functions that don't have side effects. Consider \textt{call}, a variation of \textt{spawn} that takes a location and an unevaluated expression, computes its value remotely, and returns it.
-
-\begin{code}
--- also wrong
-call :: (Serializable a) => NodeId -> a -> ProcessM a
-\end{code}
-
-Ideally, we'd like to use \textt{call} like this, even though \textt{add} captures the free name \lstinline!(+)!:
-
-\begin{code}
-add :: Int -> Int -> Int
-add a b = a + b
-
--- wrong
-res <- call someNode (add 3 4)
-\end{code}
-
-Clearly, the given signature for \textt{call} is wrong, since Haskell's lazy evaluation doesn't let us syntactically distinguish between  unevaluated and evaluated values, so the programmer doesn't have control over which computer the given expression would be computed on. What we want is a representation of a call to \textt{add} function that is distinct from actually calling it.
-
-In order to construct a representation of functions, we posit a new attribute of names, orthogonal to their type. A name is {\em staticable} if either it is a top-level name or all its free variables are staticable. We denote the context of staticable names as:
-
-\begin{align*}
-\Gamma\downarrow = \{ x:_{s} \sigma \mid x :_{s} \sigma \in \Gamma \}
-\end{align*}
-
-To use the names denoted as staticable, we furthermore posit a special \lstinline!Static a! type that can wrap only staticable types. It has a type constructor, \lstinline!Static!, and the wrapped value can be extracted using the \textt{unStatic} function:
-
-\begin{equation*}
-\tag{Static~intro.}
-\frac{\Gamma\downarrow~\entails e :_{s} \tau}
-     {\Gamma \entails \text{Static}~e : \text{Static}~\tau}
-\end{equation*}
-
-
-\begin{equation*}
-\tag{Static~elim.}
-\frac{\Gamma \entails e : \text{Static}~\tau}
-     {\Gamma \entails \text{unStatic}~e : \tau}
-\end{equation*}
-
-Now let us turn to the question of how to represent a function's environment. The names used in a function will fall into one of these categories:
-
-\begin{enumerate}
-\item Top-level names. We don't need to transmit these values, because we know that they exist on the remote system.
-\item Parameter names. These values must be provided by the caller, and therefore must be transmitted to the remote system.
-\item Local, non-top-level names. These values need to be present on the remote system, but for the reasons explained in section 2.4, we don't want to let the framework implicitly transmit them. If the programmer wants to explicitly include elements of a local environment in the remote function invocation, he or she can use the technique of {\em lambda lifting} \cite{lambdalifting} to convert the local names into parameters. % explain this here
-\item Names defined within the function. These does need to be transmitted, as their values will be constructed by the function itself.
-\end{enumerate}
-
-We have reduced the problem of serializing the function's environment into the problem of serializing the function's parameters. So implementing functions like \textt{spawn} and \textt{call} should be a matter of packaing up the \textt{Static} function representation and its arguments, serializing them, sending them over the wire, deserializing the function representation and arguments, \textt{unStatic}-ing the function, and applying the arguments. We can imagine a {\em closure} data type that encapsulates both the function representation and an encoding of its environment:
-
-\begin{code}
--- wrong
-data Closure a = Closure (Static (env -> a)) env
-\end{code}
-
-A \textt{Closure a} packages up computation that will eventually compute a value of type \textt{b}, where \textt{b} is the return type of the function to invoke. That function's free variables have been turned into parameters, so we have to pass those parameters along as part of the closure, encoded as a type \textt{env}. Naturally, the parameters themselves must also be serializable. Note that the type of the parameters must match the input to the function. Concretely, we can imagine that \textt{env} is a tuple of the function's arguments. For example, a closure for the \textt{add} function might be written as \textt{Closure (Static add) (3, 4)}. Upon receiving this \textt{Closure Int}, the remote system can call \textt{unClosure}, which will invoke the function and give its result:
-
-\begin{code}
--- wrong
-unClosure :: Closure a -> a
-\end{code}
-
-There is a wrinkle in this strategy, though, and that is that that type information about the closure is lost during serialization. The \textt{decode} function that we use to deserialize the \textt{Closure} after transmission requires that its type be known {\em a priori}. Unfortunately, the type of both the function and its environment is not available on the other side, and so we can't deserialize the closure. Even if we could, we couldn't call the function because we don't know the type of \textt{env}. This is because information about Haskell's types is not available at run-time. How, then, can we call a function with parameters, when we don't know their type?
-
-Our initial attempt at addressing this problem was to include a second function representation within the closure. This second function would have the sole task of deserializing the arguments to the correct type and then invoking the real function. We eventually realized that this could be simplified: there's no need to have two functions, when they can combined.
-
-The solution is to require the represented function itself to deserialize its own parameters. The same serialization mechanism that converts the Closure as a whole into a transmission-ready form can be applied to the function's tupled parameters. Haskell conveniently provides \textt{encode} and \textt{decode} functions in the \textt{Data.Binary} module which are able to convert any \textt{Serializable} data into a \textt{ByteString} and vice versa. So, we propose a revised version of our \textt{Closure} type:
-
-\begin{code}
--- correct, but impractical
-data Closure a = Closure (Static (ByteString -> a)) ByteString
-\end{code}
-
-We have replaced the tuple \textt{rep} in the earlier version with a concrete type, \textt{ByteString}, that represents an encoding of the function parameters. The first job of the function, then, will be to call \textt{decode} to get their values. The function can do this, while the framework cannot, because the framework doesn't know what type to deserialize the \textt{ByteString} into. It is ultimately only the function itself that knows the type of environment that it expects, and this information cannot be extracted at runtime.
-
-This procedure of encoding and decoding function arguments is safe, even if by some accident the function tries to decode its arguments into the wrong type. In that case, \textt{decode} will throw an exception that is caught by the framework and passed back to the initiator. We have essentially built a dynamic type system on top of Haskell's static type system in order to facilitate remote function invocation.
-
-If we assume that the language provides a serializable representation of all \textt{Static} types (that is, \textt{Static a} is an instance of \textt{Serializble}), our new definition of \textt{Closure} is sufficient to implement \textt{spawn} and \textt{call}, which now have the following types:
-
-\begin{code}
--- correct!
-spawn :: NodeId -> Closure (ProcessM ()) -> ProcessM ProcessId
-call :: (Serializable a) => NodeId -> Closure a -> ProcessM a
-\end{code}
-
-Unfortunately, our consideration of the \textt{Static} type and its dependence on a notion of staticability requires extensions to the underlying language, and Haskell does not currently provide these extensions. How, then, to proceed?
-
-\subsection{Closures in practice}
+Unfortunately, our consideration of the \textt{Static} type 
+requires extensions to the underlying language, and Haskell does not currently provide these extensions. How, then, to proceed?
 
 Our definition in the previous section allows a serializable representation of any staticable function, where a staticable function is a top-level function or a function whose free variables are staticable. A reasonable approximation of the set of staticable functions is the set of top-level functions, and as it turns out, providing serializable representations of any top-level function is a much easier goal than providing serializable representations of any staticable function; in fact, with this minor restriction, we are able to implement this feature, and the closures that depend on it, without extending the language. Furthermore, we feel that limiting serializability to top-level functions isn't a major additional restriction, since any staticable function can be trivially made top-level. Finally, top-level functions are all automatically staticable and cannot capture non-staticable names from their environment, and so are guaranteed to be safe to serialize.
 
@@ -1016,10 +1018,6 @@ Implementing a framework for distributed computing in Haskell has been done befo
 % This is the text of the appendix, if you need one.
 
 \acks
-
-<<<<<<< HEAD
-Alan Mycroft.
-
 Thanks to Alan Mycroft for support and helpful feedback. 
 We particularly thank John Launchbury who helped us see that $(\text{\tt Static}\;\tau)$
 would be a better type for than a static \emph{function} type 
