@@ -247,12 +247,12 @@ How do we start the exchange? Clearly we need to create two channels and call \t
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
 \caption{A summary of the API.}
-%\begin{tabular}{l}
+
 \textbf{Basic messaging} 
 \begin{code}
 send :: (Serializable a) => ProcessId -> a -> ProcessM ()
 expect :: (Serializable a) => ProcessM a
-
+\end{code}
  \textbf{Channels}
 \begin{code}
 newChannel :: Serializable a => ProcessM (SendPort a, ReceivePort a)
