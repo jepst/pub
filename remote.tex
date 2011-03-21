@@ -54,12 +54,12 @@
     }
 
 
-\conferenceinfo{WXYZ '05}{date, City.} 
+\conferenceinfo{ICFP 2011}{date, City.} 
 \copyrightyear{2011} 
 \copyrightdata{[to be supplied]} 
 
-\titlebanner{banner above paper title}        % These are ignored unless
-\preprintfooter{short description of paper}   % 'preprint' option specified.
+\titlebanner{Haskell for the Cloud}        % These are ignored unless
+\preprintfooter{Haskell for the Cloud}   % 'preprint' option specified.
 
 
 
@@ -104,7 +104,7 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present a framework for developing Haskell programs to be run in a distributed computing environment. It provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, without giving up Haskell's strengths in strong typing and traditional concurrent programming.
+We present a framework for developing Haskell programs to be run in a distributed-memory computing environment. It provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrent programming.
 
 \end{abstract}
 
@@ -121,34 +121,38 @@ keyword1, keyword2
 
 \section{Introduction}
 
-With the age of steadily improving processor performance behind us, the way forward seems to be to compute with more, rather than faster, processors. A data center for storing and processing end users' data or running users' programs on a  group of servers is termed a {\em cloud}. We'll use this term to mean specifically a network of connected computers, having independent failure modes and separate memories. But how to program such a system?
+With the age of steadily improving processor performance behind us, the way forward is to compute with more, rather than faster, processors. A data center that makes available a large number of processors for storing and processing users' data, or running users' programs, is termed a \emph{cloud}. We'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
 
-Developing for the cloud presents some unique challenges. There is the obvious task of coordinating program control between many, possibly heterogeneous computers. In addition, the programmer needs to expect that in a network of dozens or hundreds of computers, some of them will fail, and so any such cloud system needs to be able to tolerate partial failure of any of its constituents. And, of course, the cloud needs to be able to deliver high performance, particularly as it relates to data locality: without shared memory, a major drain on performance is the transmission of data across the network, and so the framework needs to expose some ability to control the application's {\em cost model}, that is, which data is moved and when.
+How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using conventional shared-memory concurrency primitives, such as locks and transactions. 
+We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  For example, 
+$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
+The second objection is that, to be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
 
-How shall we address these issues? To the extent that modern, popular programming languages support concurrency, it's usually of a shared-memory variety: that is, it presents the programmer with the abstraction of multiple concurrent threads accessing a pool of mutable common data. This model is clearly inappropriate for programming concurrency in a cloud, as there is in fact no shared memory between physically independent computers.
+Instead, we turn to a solution, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly copied by sending and receiving {\em messages}.  Not only does this make the costs of communication apparent; it also eliminates many of the classic concurrency pitfalls, such as race conditions.
 
-The solution we use, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}, is {\em message passing}. The message passing model stipulates that the concurrent threads have no implicit access to each other's data, but instead share data explicitly by sending and receiving {\em messages}. 
+Developing for the cloud presents other challenges.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; a programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang is has a solution that has stood the test of time; the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
 
-Even better, the message-passing model for thread communication eliminates some of the classic concurrency pitfalls, such as race conditions, which cause bugs whose detection and removal may be beyond the skill of many programmers. 
-
-Haskell is an ideal language for this problem space. As a pure functional language, data is by default immutable, so the lack of shared mutable data won't be missed. Also, since code is by default idempotent, code running on failing hardware can be restarted elsewhere without the need for distributed transactions.
+If Erlang has been so successful, you may wonder what Haskell brings to the table. 
+The short answer is: purity, types, and monads.  As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed.  More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. Another consequence of purity is that functions are idempotent; this means that code running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
+Types in general, and monadic type in particular, help to guarantee properties of programs statically.  
+For example, a pure function \emph{cannot} have the same type as one that has an externally-visible effect such as sending or receiving a message.  
+Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
 The contributions of this paper are:
-
 \begin{itemize}
-\item A proposal for a distributed programming API for Haskell (Section 2). Following the Erlang model, our framework provides a system for exchanging messages between concurrent threads, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, the API provides functions for starting new threads remotely. Our framework also offers fault tolerance, again closely following the widely-respected Erlang model. Unlike Erlang, our framework does not prohibit the use of explicit shared memory concurrency mechanisms.
-\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section 3). The need to start threads remotely demands a representation of code objects and their environment. Our approach to closures requires explicit indication of which parts of the function's environment will be serialized and thus gives the programmer greater control over his or her application's cost model.
-\item A demonstration of the effectiveness of our approach in the form of example applications (Section 4). We provide performance measurements from the k-means clustering algorithm, an iterative algorithm for partitioning data point into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
+\item An interface for distributed programming in Haskell (Section \ref{Processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, we provide functions for starting new threads remotely, and for fault tolerance, which closely follow the widely-respected Erlang model. Unlike Erlang, our framework does not prohibit the use of explicit shared memory concurrency mechanisms \emph{within} one of our concurrent processes.
+
+\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{Closures}). Starting a remote process demands a representation of code objects and their environment. Our approach to closures requires a \emph{explicit} indication of which parts of the function's environment will be serialized, and thus gives the programmer control over the cost of data movement.
+
+\item A demonstration of the effectiveness of our approach in the form of example applications (Section \ref{Benchmarks}). We provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
 \end{itemize}
 
 \section{Processes and messages}
-
+\label{Processes}
 \subsection{Processes}
-The basic unit of concurrency in our framework is the {\em process}. A process is a thread that has been ``blessed'' with the ability to send and receive messages. Processes are lightweight, having low overhead to create and run, because they are based on Haskell's \textt{forkIO} lightweight threads, and thus unlike heavyweight OS threads, the programmer can create larger numbers of concurrent processes.
+The basic unit of concurrency in our framework is the {\em process}. A process is a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-Processes are identified by a unique process ID. When creating a new process, the its ID will be returned, and can be used to send messages to the new process.
-
-In most respects, our framework follows the Erlang model by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not outright prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
+In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
 
 \subsection{Messages to processes}
 
@@ -280,6 +284,7 @@ Finally, we should mention that in a non-strict language such as Haskell, implic
 In our framework, a captured environment is never transmitted implicitly. We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
 
 \subsection{Fault tolerance}
+\label{FaultTolerance}
 We aimed to follow as closely as possible Erlang's model for fault tolerance. Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
 
 Our fault tolerance API is based on the idea that a process can monitor another process. If the monitored process terminates, the other process will be notified, and can take appropriate action. We provide relatively only low-level functions that allow for notification of possible faults. Actually recovering from faults is left to the application or a higher-level framework, such as the one briefly discussed in the Future work section.
@@ -302,6 +307,7 @@ linkProcess :: ProcessId -> ProcessM ()
 
 
 \section{Closures}
+\label{Closures}
 \begin{comment}
 there's no way for a library to know what to transmit, or even if it's serializable. Clearly, we don't want to prevent remotely-invocable functions from ever using non-serializable data. That would mean that any function that could be started using \textt{spawn} wouldn't be allowed to use \textt{MVar}.
 
@@ -504,7 +510,7 @@ A disadvantage of missing the dynamic updating is that code needs to be distribu
 \end{itemize}
 
 
-\section{Examples}
+\section{Examples}		\label{Benchmarks}
 Here, we show how this framework can be used to implement some well-known distributed algorithms.
 pi calculator, omit sequence generator
 fgrep
