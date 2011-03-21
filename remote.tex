@@ -574,7 +574,7 @@ A disadvantage of missing the dynamic updating is that code needs to be distribu
 As a practical example, we present a complete, albeit trivial, example of a distributed application. The application provides a remote counter, which can be incremented and queried by a client process. This example mirrors a similar example Erlang, presented in ????
 
 % maybe do fgrep example too? k-means
-
+HOW TO DEPLOY, SET UP CONFIG FILE, ETC
 
 \begin{code}
 module Main where
@@ -628,7 +628,8 @@ go "MASTER" =
 go "WORKER" = 
   receiveWait []
 
-main = remoteInit (Just "config") [Main.__remoteCallMetaData] go
+main = remoteInit (Just "config")
+        [Main.__remoteCallMetaData] go
 \end{code}
 % $
 
@@ -640,13 +641,19 @@ The \textt{go} function is split into two parts: one which will run on nodes des
 
 Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
 
-HOW TO DEPLOY
-
 \section{Performance}
 
 One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans algorithm.
 
-1,000,000 points 2-dimensional points
+1,000,000 2-dimensional points
+
+EC2
+
+simple configure script, generates config file
+
+pretty graphs
+
+possibly measure utilization as well?
 
 \begin{center}
 \begin{table}[h]
@@ -663,10 +670,6 @@ One goal of a distributed system is to be able coordinate compute- and data-inte
 \end{tabular}
 \end{table}
 \end{center}
-\begin{itemize}
-
-\item what other interesting performance measures? graph?
-\end{itemize}
 
 
 \section{Future work}
@@ -674,7 +677,7 @@ The framework, as presented in this paper, provides a good starting point for bu
 
 Whereas the process abstraction lets programmers start threads, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. To this end, it uses the current framework as a building block. Data dependencies and tasks are represented as the edges and vertices, respectively, of a directed acyclic graph, and are exposed to the programmer as {\em promises}.
 
-With our task framework, we hope to provide functionality similar to well-known distributed frameworks like MapReduce \cite{MapReduce2008} and Dryad \cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010} project.
+With our task framework, we hope to provide functionality similar to well-known distributed frameworks like MapReduce \cite{MapReduce2008} and Dryad \cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010}\cite{Murray2011} project.
 
 % Isis/Paxos/virtual synchrony consensus?
 
@@ -682,10 +685,9 @@ With our task framework, we hope to provide functionality similar to well-known 
 
 In scientific computing, the most well-known solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is optimized for supercomputers, rather than clusters of networked commodity PCs. 
 
-
 There have been lots of mechanisms for executing functions on remote systems. Specific to Java is the Remote Method Invocation (RMI) \cite{javarmi}. CORBA proides the Interface Description Language (IDL) \cite{corbaidl} to define implementation-language-independent remote functions. Web services often use the SOAP standard to implement remote procedure call.
 
-Implementing a framework for distributed computing in Haskell has been done before, in the form of Glasgow Distributed Haskell \cite{gdh2001}. Unlike our work, it tries to maintain the semantics of shared-memory concurrency in a distributed environment, rather than insisting on a new style of programming.
+Implementing a framework for distributed computing in Haskell has been done before, in the form of Glasgow Distributed Haskell \cite{gdh2001}. Unlike our work, it tries to maintain the semantics of shared-memory concurrency in a distributed environment, rather than insisting on message-based communication between nodes.
 
 % more here?
 
