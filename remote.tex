@@ -48,7 +48,7 @@
                {\\\\}{{\char`\\\char`\\}}1
                {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
                {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
-               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+%               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
                {>>}{{>>}}2 {>>=}{{>>=}}2
                {|}{{$\mid$}}1               
     }
@@ -318,6 +318,253 @@ only local and global names are visible in a top-level function. This is a reaso
 
 prevention of sharing bad things (e.g. mvars, receiveports) is enforced by the serializer
 \end{comment}
+% ----------------------------------------------- BEGIN SIMON
+
+Any distributed implementation of a statically-typed, 
+higher-order programming language must
+grapple with the fundamental question of \emph{how to transmit closures} from
+one node to another.  For example, consider:
+\begin{code}
+  sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
+  sf ch x = send ch (\y -> x+y)
+\end{code}
+A function value is a closure that captures its free variables,
+\textt{x} in the example, so to serialise a function value
+one must serialise its free variables.  But the types of
+these free variables are unrelated to the type of the function
+value, so it is entirely unclear \emph{how} to serialise them.
+In concrete terms, there is no way to write this instance
+declaration
+\begin{code}
+  instance ???? => Serialisable (a->b) where ????
+\end{code}
+One ``solution'' would be to say that functions are simply not
+serialisable --- but exactly the same issue arises with \textt{spawn}
+which is clearly essential.  Consider
+\begin{code}
+  nc :: ProcessM ()
+  nc = do { (s,r) <- newChan
+          ; spawn node (do { v <- receive r
+                           ; ... })
+          ; ... }
+\end{code}
+The \textt{ProcessM} argument of \textt{spawn} is a value closed over
+its free variables, \textt{r} in this case, so exactly the same issue
+arises.
+
+\subsection{The standard solution}
+
+The standard approach to this problem is to build in serialisation of
+function values --- and indeed of all values --- as a primitive operation
+implemented directly by the runtime system.  That is, the runtime system
+allows one to serialise \emph{any value at all}, and transport it to the 
+other end of the wire.  Now function closures can be serialised by
+serialising their free variables, and adding a representation of their code.
+This approach is used by every higher-order distributed-memory 
+system that we know of, including GDH \cite{GDH}, JoCaml (check!!!), \emph{what else}.
+
+But making serialisability built-in
+has multiple disadvantages:
+\begin{itemize}
+\item It relies on a single built-in notion of serialisability.
+In contrast, the \texttt{Serialisable} type class introduced in 
+Section~\ref{s:serialisable} gives the programmer control over how
+values are serialised.  For example, a data structure might have
+redundant information cached in the nodes, which should be reconstructed
+at the far end rather than being serialised.  
+This is exactly what type
+classes are for!
+\item It is crucial that some types are \emph{not} serialisable. For
+example, we do not want the receive port of a channels to be serialisable, 
+so that senders know where to send their messages to.  Similarly making 
+\textt{TVar}s non-serialisable guarantees that \textt{STM} transactions 
+do not span processes.
+\item Serialising a value and sending it over the network has an important
+effect on the cost model; it should not be silent.
+\end{itemize}
+In short, built-in serialisability of every value is
+too big a primitive.  We do need \emph{some} built-in support, but
+we seek something more more modest.  Proposing such a mechanism is one of 
+the main contributions of this paper.
+
+\subsection{Static values}
+
+We begin with a simple intuituion: some closures can readily be
+transmitted to the other end of the wire, namely ones that have no
+free variables.  For the present we make a simplifying assumption,
+that every node is running the same code.  (We return to the question
+of code that varies between nodes in Section~\ref{s:further-work}.)
+Under this assumption, a closure without free variables can be
+readily be serialised to a single label, or even (in the limit) a machine
+address.  Types classify values, so it is natural to suggest 
+a type $(\text{\tt Static}~\tau)$ to classify such values.  The type 
+constructor \textt{Static} is a new built-in primitive, 
+enjoying a built-in serialisation instance:
+\begin{code}
+  instance Serialisable (Static a)
+\end{code}
+It is helpful to remember this intuition: \emph{the defining property of
+a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialised},
+can moreover can be serialised without knowledge of how to serialise $\tau$.
+Operationally, the implementation serialises a \textt{Static} value by first evaluating it,
+and then serialising the code label in the value thus obtained.  
+
+\begin{figure}
+\begin{minipage}{\linewidth}
+$$
+\begin{array}{rcl}
+\Gamma & ::= & \overline{x :_{\delta} \sigma} \\
+     \delta & ::= & S | D
+\end{array}
+$$
+\begin{align*}
+\Gamma\downarrow = \{ x:_{s} \sigma \mid x :_{s} \sigma \in \Gamma \}
+\end{align*}
+
+\begin{equation*}
+\tag{Static~intro.}
+\frac{\Gamma\downarrow~\entails e : \tau}
+     {\Gamma \entails \text{\tt static}~e : \text{\tt Static}~\tau}
+\end{equation*}
+
+\begin{equation*}
+\tag{Static~elim.}
+\frac{\Gamma \entails e : \text{\tt Static}~\tau}
+     {\Gamma \entails \text{\tt unstatic}~e : \tau}
+\end{equation*}
+\end{minipage}
+\caption{Typing rules for \textt{Static}} \label{fig:static}
+\end{figure}
+Along with the new type constructor we introduce a new term,
+$(\text{\tt static}\;e)$ to introduce it, and another 
+$(\text{\tt unstatic}\;e)$ to elimiate it.
+The simple typing judgements for these terms are given in Figure~\ref{fig:static}.
+They embody the following key ideas:
+\begin{itemize}
+\item A \emph{variable is static} iff it is bound at the top level.
+\item A \emph{term $(\text{\tt static}\;e)$ has type $(\text{\tt Static}\;\tau)$} iff 
+(a) $e$ has type $\tau$, and (b) $e$ is static.  
+\end{itemize}
+The type environment $\Gamma$ is a set of variable bindings, each of form $x :_{\delta} \sigma$.
+The subscript $\delta$ is a static-ness flag, which takes the values \textt{S} (static) or
+\textt{D} (dynamic).  The idea is that top-level (static) variables have bindings
+of form $f :_{\text{\tt S}}$, while all other variables have dynamic bindings $x :_{\text{\tt D}}$.
+(It is straightforward to formalise this idea in the typing judgements for top-level
+bindings and for terms; we omit the details.)
+The operation $\Gamma \downarrow$ filters $\Gamma$ to leave only the static bindings,
+thereby checking that a term $\text{\tt static}\;e$ is only well typed if its free
+variables are all static.
+
+Although simple, these rules have intersting consequences:
+\begin{itemize}
+\item A static variable may have a non-\textt{Static} type. Consider the 
+top-level binding for the identity function:
+\begin{code}
+  id :: a -> a
+  id x = x
+\end{code}
+The function \textt{id} is by definition static (top-level).  Its binding
+in $\Gamma$ will have $\delta=\text{\tt S}$, but its type is the ordinary
+polymoprhic type.
+
+\item A non-static variable may have a \textt{Static} type.  For example
+\begin{code}
+  f :: Static a -> (Static a, Int)
+  f x = (x, 3)
+\end{code}
+Here \texttt{x} is clearly not a static variable, but it certainly has
+a \textt{Static} type.  So fully-dynamic functions
+can readily compute over values of \textt{Static} type.
+
+\item The free variables of a term $(\text{\tt static}\;e)$ need not have
+type $(\text{\tt Static}\;\tau)$. For example, this term is well-typed:
+\begin{code}
+  static (length . filter id) :: Static ([Bool] -> Int)
+\end{code}
+because all its free variables (\textt{length}, \textt{(.)},
+\textt{filter}, \textt{id}) are bound at top-level and hence are
+static. However, all these functions have their usual types.
+\end{itemize}
+
+\subsection{From static values to closures}
+
+In the examples \textt{sf} and
+\textt{nc} (at the start of this Section) we wanted to transmit closure
+that certainly did have free variables.  How do static values help us?
+Answer: they help us by making closure conversion possible. A closure
+is just a pair of a code pointer and an environment.  With the aid of
+\textt{Static} values we can now represent a closure directly in Haskell:
+\begin{code}
+data Closure a where   -- Wrong
+  MkClo :: Static (env -> a) 
+        -> env -> Closure a
+\end{code}
+As is conventional, we capture the environment in an existential.
+The trouble is that this closure type is not serialisable: precisely
+because the environment is existentially quantified, there is no information
+for how to serialise it!  This is apparently esay to solve, by asking
+that the environment be serialisable:
+\begin{code}
+data Closure a where   -- Still wrong
+  MkClo :: Serialisable env
+        => Static (env -> a) -> env -> Closure a
+\end{code}
+Now serialisation is easy:
+\begin{code}
+instance Serialisable (Closure a) where
+   encode (MkClo f env) = encode f ++ encode env
+\end{code}
+But how can we \emph{de}-serialise a closure?  The difficulty is
+that, at the receiving end, we do not know the type captured inside
+the closure, so we do not know what deserialiser to use.  This initially
+appears to be a very awkward problem indeed. Maybe we have to send a 
+representation of the environment type, and do a run-time type-class lookup
+at the receiving end?  This solution is used by Clean \cite{clean}.  Maybe
+we could send some representation of the deserialisation function itself?
+But that seems to require a solution to the problem of serialising 
+closures, so an infinite regress beckons.
+
+Happily, the solution is simple and, with the benefit of hindsight,
+obvious: perform both serialisation and deserialisation at \emph{closure-construction time},
+not at \emph{closure-serialisation time}:
+\begin{code}
+data Closure a where   -- Right
+  MkClo :: Serialisable env
+        => Static (ByteString -> a) 
+        -> ByteString -> Closure a
+\end{code}
+To see this in action, here is our earlier \textt{sf} example, 
+expressed using closures:
+\begin{code}
+  sf :: SendPort (Closure (Int -> Int)) 
+     -> Int -> ProcessM ()
+  sf ch x = send ch clo
+    where
+      clo  = MkClo (static sfun) (encode x)
+
+  sfun :: Static (ByteString -> Int -> Int)
+  sfun = static (\bs -> let x = decode bs 
+                        in \y -> x + y)
+\end{code}
+The closure contains the pre-serialised environment \textt{encode x},
+and the static function \textt{sfun}. The latter de-serialises its
+argument \textt{bs} to get the real argument \textt{x} that it expects.
+
+It is easy to un-closure-convert:
+\begin{code}
+  unClo :: Closure a -> a
+  unClo (MkClo f x) = unstatic f x
+\end{code}
+This is when the deserialisation of the environment takes place. For a
+function-valued closure it makes sense to apply \textt{unClo} once, and
+apply the resulting function many times, so that the deserialisation is
+one just once.
+
+Performing manual closure conversion is tiresome for the programmer,
+and we describe some Template Haskell support in
+Section~\ref{sect:th}.  But it has the great merit that it makes
+crystal clear exactly what is serialised, and when.  
+
 % ----------------------------------------------- BEGIN ANDREW
 
 To provide explicit control over which data accompanies a remote function invocation, we use {\em closures}. For our purposes, a closure is a data structure that encapsulates both a representation of a function and its environment. Including the environment is especially important in a language like Haskell, where so much of the power of higher-order functions rests in their ability to accept functions that do capture local names, but we also want to prevent the programmer from accidentally transmitting an unnecessarily large environment.
@@ -612,8 +859,11 @@ Both of these layers are accessible as a small domain-specific language (DSL), e
 
 \acks
 
-Alan Mycroft
-that guy from MSR who talked with Simon about static?
+Alan Mycroft.
+
+We thank John Launchbury who helped us see that $(\text{\tt Static}\;\tau)$
+would be a better type for than a static \emph{function} type 
+$\sigma \stackrel{\to}{\#} \tau$.
 
 % The bibliography should be embedded for final submission.
 
