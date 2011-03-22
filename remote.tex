@@ -257,6 +257,73 @@ How do we start the exchange? Clearly we need to create two channels and call \t
 
 \subsection{Starting processes}
 
+%\setlength{\parindent}{-3in}
+\begin{figure}[t!]
+\textbf{Basic messaging} 
+\begin{code}
+send :: (Serializable a) => ProcessId -> a -> ProcessM ()
+expect :: (Serializable a) => ProcessM a
+\end{code}
+ \textbf{Channels}
+\begin{code}
+newChannel :: Serializable a => ProcessM (SendPort a, ReceivePort a)
+sendChannel :: Serializable a => SendPort a -> a -> ProcessM ()
+receiveChannel :: Serializable a => ReceivePort a -> ProcessM a
+mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
+mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
+\end{code}
+
+ \textbf{Advanced messaging}
+\begin{code}
+receiveWait :: [MatchM q ()] -> ProcessM q
+receiveTimeout :: Int -> [MatchM q ()] -> ProcessM (Maybe q)
+match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
+matchIf :: Serializable a => (a -> Bool) -> (a -> ProcessM q) -> MatchM q ()
+matchUnknown :: ProcessM q -> MatchM q ()
+\end{code}
+
+ \textbf{Process management}
+\begin{code}
+spawn :: ProcessM () -> ProcessM ProcessId
+call :: (Serializable a) => NodeId -> Closure (ProcessM a) -> ProcessM a
+terminate :: ProcessM a
+getSelfPid :: ProcessM ProcessId
+getSelfNode :: ProcessM NodeId
+\end{code}
+
+ \textbf{Process monitoring}
+\begin{code}
+linkProcess :: ProcessId -> ProcessM ()
+monitorProcess :: ProcessId -> ProcessId -> MonitorAction -> ProcessM ()
+\end{code}
+
+ \textbf{Initialization}
+\begin{code}
+remoteInit :: Maybe FilePath -> [RemoteCallMetaData] -> (String -> ProcessM ()) -> IO ()
+getPeers :: ProcessM PeerInfo
+findPeerByRole :: PeerInfo -> String -> [NodeId]
+\end{code}
+
+ \textbf{Syntactic sugar}
+\begin{code}
+remotable :: [Name] -> Q [Dec]
+\end{code}
+
+ \textbf{Logging}
+\begin{code}
+say :: String -> ProcessM ()
+\end{code}
+
+ \textbf{Type classes}
+\begin{code}
+class (Binary a,Typeable a) => Serializable a
+class Typeable a where typeOf :: a -> TypeRep
+class Binary t where put :: t -> Put; get :: Get t
+\end{code}
+\caption{A summary of the API} \label{fig:api}
+\end{figure}
+
+
 To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
 
 \begin{code}
