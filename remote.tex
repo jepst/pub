@@ -196,7 +196,7 @@ Here we present some of the important functions that form the messaging API of o
 \begin{itemize}
 \item 
 \begin{code}
-send :: (Serializable a) => ProcessId -> a -> ProcessM ()
+send :: Serializable a => ProcessId -> a -> ProcessM ()
 \end{code}
 
 To send a message, use \textt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \textt{Serializable} type class, as well as Haskell's \textt{Data.Binary.Binary} class, which allows the data to be converted to a form suitable for transmission. The \textt{send} function corresponds to Erlang's \texttt{!} operator.
@@ -206,7 +206,7 @@ While all of Haskell's primitive data types and most of the common higher-level 
 \item 
 \begin{code}
 receiveWait :: [MatchM q ()] -> ProcessM q
-match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
+match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
 \end{code}
 
 On the receiving end, \textt{receiveWait} and \textt{match}, which operate as a pair, examine the message queue associated with the current process and extract a received message, unpacking the transmitted chunk of data and executing an associated block of user code. Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
@@ -222,9 +222,9 @@ Thus, an alternative to sending messages by process identifier is to use {\em ty
 The central functions of the channel API are:
 
 \begin{code}
-newChannel :: (Serializable a) => ProcessM (SendPort a, ReceivePort a)
-sendChannel :: (Serializable a) => SendPort a -> a -> ProcessM ()
-receiveChannel :: (Serializable a) => ReceivePort a -> ProcessM a
+newChan :: Serializable a => ProcessM (SendPort a, ReceivePort a)
+sendChan :: Serializable a => SendPort a -> a -> ProcessM ()
+receiveChan :: Serializable a => ReceivePort a -> ProcessM a
 \end{code}
 
 A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
@@ -235,8 +235,8 @@ We can now reformulate our ping example to use typed channels. The process must 
 \begin{code}
 ping2 :: SendPort Ping -> ReceivePort Pong -> ProcessM ()
 ping2 pingout pongin = 
-   do { (Pong partner) <- receiveChannel pongin
-      ; sendChannel partner (Ping pongin) 
+   do { (Pong partner) <- receiveChan pongin
+      ; sendChan partner (Ping pongin) 
       ; ping pingout pingin }
 \end{code}
 
@@ -246,33 +246,44 @@ How do we start the exchange? Clearly we need to create two channels and call \t
 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
+\small
 \textbf{Basic messaging} 
 \begin{code}
-send :: (Serializable a) => ProcessId -> a -> ProcessM ()
-expect :: (Serializable a) => ProcessM a
+send   :: Serializable a => ProcessId -> a
+       -> ProcessM ()
+expect :: Serializable a => ProcessM a
 \end{code}
  \textbf{Channels}
 \begin{code}
-newChannel :: Serializable a => ProcessM (SendPort a, ReceivePort a)
-sendChannel :: Serializable a => SendPort a -> a -> ProcessM ()
-receiveChannel :: Serializable a => ReceivePort a -> ProcessM a
-mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
-mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
+newChan  :: Serializable a 
+         => ProcessM (SendPort a, ReceivePort a)
+sendChan :: Serializable a 
+         => SendPort a -> a -> ProcessM ()
+receiveChan :: Serializable a => ReceivePort a
+            -> ProcessM a
+mergePortsBiased :: Serializable a => [ReceivePort a]
+                 -> ProcessM (ReceivePort a)
+mergePortsRR :: Serializable a => [ReceivePort a] 
+             -> ProcessM (ReceivePort a)
 \end{code}
 
  \textbf{Advanced messaging}
 \begin{code}
-receiveWait :: [MatchM q ()] -> ProcessM q
-receiveTimeout :: Int -> [MatchM q ()] -> ProcessM (Maybe q)
-match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
-matchIf :: Serializable a => (a -> Bool) -> (a -> ProcessM q) -> MatchM q ()
+receiveWait    :: [MatchM q ()] -> ProcessM q
+receiveTimeout :: Int -> [MatchM q ()] 
+               -> ProcessM (Maybe q)
+match   :: Serializable a => (a -> ProcessM q) 
+        -> MatchM q ()
+matchIf :: Serializable a => (a -> Bool) 
+        -> (a -> ProcessM q) -> MatchM q ()
 matchUnknown :: ProcessM q -> MatchM q ()
 \end{code}
 
  \textbf{Process management}
 \begin{code}
-spawn :: ProcessM () -> ProcessM ProcessId
-call :: (Serializable a) => NodeId -> Closure (ProcessM a) -> ProcessM a
+spawn :: NodeId -> Closure (ProcessM ()) 
+      -> ProcessM ProcessId
+% call :: (Serializable a) => NodeId -> Closure (ProcessM a) -> ProcessM a
 terminate :: ProcessM a
 getSelfPid :: ProcessM ProcessId
 getSelfNode :: ProcessM NodeId
@@ -281,12 +292,14 @@ getSelfNode :: ProcessM NodeId
  \textbf{Process monitoring}
 \begin{code}
 linkProcess :: ProcessId -> ProcessM ()
-monitorProcess :: ProcessId -> ProcessId -> MonitorAction -> ProcessM ()
+monitorProcess :: ProcessId -> ProcessId 
+               -> MonitorAction -> ProcessM ()
 \end{code}
 
  \textbf{Initialization}
 \begin{code}
-remoteInit :: Maybe FilePath -> [RemoteCallMetaData] -> (String -> ProcessM ()) -> IO ()
+remoteInit :: Maybe FilePath -> [RemoteCallMetaData] 
+           -> (String -> ProcessM ()) -> IO ()
 getPeers :: ProcessM PeerInfo
 findPeerByRole :: PeerInfo -> String -> [NodeId]
 \end{code}
@@ -400,7 +413,7 @@ grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
   sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf ch x = send ch (\y -> x+y)
+  sf ch x = send ch (\y -> x+y+1)
 \end{code}
 A function value is a closure that captures its free variables,
 \textt{x} in the example, so to serialise a function value
@@ -413,22 +426,23 @@ declaration
   instance ???? => Serialisable (a->b) where ????
 \end{code}
 One ``solution'' would be to say that functions are simply not
-serialisable --- but exactly the same issue arises with \textt{spawn}
-which is clearly essential.  Consider
+serialisable --- but exactly the same issue arises with \textt{spawn}:
 \begin{code}
   nc :: ProcessM ()
   nc = do { (s,r) <- newChan
-          ; spawn node (do { v <- receive r
-                           ; ... })
+          ; spawn node (do { ...ans...
+                           ; send s ans })
           ; ... }
 \end{code}
 The \textt{ProcessM} argument of \textt{spawn} is a value closed over
 its free variables, \textt{r} in this case, so exactly the same issue
-arises.
+arises.  We can hardly solve the problem by outlawing \textt{spawn} -- we
+need \emph{some} way to start a remote computation and that willy-nilly
+involves serialising a closure of some kind.
 
 \subsection{The standard solution}
 
-The standard approach to this problem is to build in serialisation of
+The standard approach to this problem is to bake in serialisation of
 function values --- and indeed of all values --- as a primitive operation
 implemented directly by the runtime system.  That is, the runtime system
 allows one to serialise \emph{any value at all}, and transport it to the 
@@ -437,7 +451,7 @@ serialising their free variables, and adding a representation of their code.
 This approach is used by every higher-order distributed-memory 
 system that we know of, including GDH \cite{GDH}, JoCaml (check!!!), \emph{what else}.
 
-But making serialisability built-in
+Making serialisability built-in
 has multiple disadvantages:
 \begin{itemize}
 \item It relies on a single built-in notion of serialisability.
@@ -607,22 +621,8 @@ data Closure a where   -- Right
         => Static (ByteString -> a) 
         -> ByteString -> Closure a
 \end{code}
-To see this in action, here is our earlier \textt{sf} example, 
-expressed using closures:
-\begin{code}
-  sf :: SendPort (Closure (Int -> Int)) 
-     -> Int -> ProcessM ()
-  sf ch x = send ch clo
-    where
-      clo  = MkClo (static sfun) (encode x)
-
-  sfun :: Static (ByteString -> Int -> Int)
-  sfun = static (\bs -> let x = decode bs 
-                        in \y -> x + y)
-\end{code}
-The closure contains the pre-serialised environment \textt{encode x},
-and the static function \textt{sfun}. The latter de-serialises its
-argument \textt{bs} to get the real argument \textt{x} that it expects.
+Now the correct deserialiser becomes part of the static code pointer 
+in the closure.  Simple.
 
 It is easy to un-closure-convert:
 \begin{code}
@@ -634,10 +634,163 @@ function-valued closure it makes sense to apply \textt{unClo} once, and
 apply the resulting function many times, so that the deserialisation is
 one just once.
 
+\subsection{Closures in practice} \label{s:closures-in-practice}
+
+To see closures in action, here is our earlier \textt{sf} example, 
+expressed using closures:
+\begin{code}
+  sf :: SendPort (Closure (Int -> Int)) 
+     -> Int -> ProcessM ()
+  sf ch x = send ch clo
+    where
+      clo  = MkClo (static sfun) (encode x)
+
+  sfun :: ByteString -> Int -> Int
+  sfun = \bs -> let x = decode bs 
+             in \y -> x + y + 1)
+\end{code}
+The closure contains the pre-serialised environment \textt{encode x},
+and the static function \textt{sfun}. The latter deserialises its
+argument \textt{bs} to get the real argument \textt{x} that it expects.
+
+As a second example, consider \textt{nc} from the beginning of this section.
+Using closures we would rewrite it like this:
+\begin{code}
+  nc :: ProcessM ()
+  nc = do { (s,r) <- newChan
+          ; spawn node (MkClo (static child) (encode s))
+          ; ... }
+
+  child :: ByteString -> ProcessM ()
+  child = \bs -> let s = decode bs
+              in do { ...ans...
+                    ; sendChan s ans })
+\end{code}
+The type of \texttt{spawn} is given in Figure~\ref{fig:api}; it takes
+a closure as its second argument.
+
+\subsection{Summary}
+
+In this section we introduced a rather simple set of language primitives:
+\begin{itemize}
+\item A new type constructor \textt{Static}, with built-in serialisation.
+\item A new term form $(\text{\tt static}~e)$.
+\item A new primitive function \textt{unstatic :: Static a -> a}.
+\end{itemize}
+Building on these primitives we can manually construct closures and
+control exactly how and when they are serialised.
 Performing manual closure conversion is tiresome for the programmer,
-and we describe some Template Haskell support in
-Section~\ref{sect:th}.  But it has the great merit that it makes
-crystal clear exactly what is serialised, and when.  
+and one might wonder about adding some syntactic sugar.
+We have not yet explored this option very much, preferring to work out the
+foundations first.
+However in the next section we describe some simple Template Haskell support.
+
+% A more intrusive drawback of our approach is that serialization cannot
+% handle existential data types or generalized abstract data types
+% (GADTs) at all. That is, no remotely invoked function can accept an
+% existential or GADT parameter or return such a type. The problem is
+% that these extended Haskell types can hide constituent data types that
+% are not reflected in the signature of the enclosing type. As a result,
+% the type-based dispatch for serializing and deserializing them has no
+% way to know which concrete serializer and deserializer to invoke. As
+% far as we know, serializing existentials and GADTs would require some
+% form of run-time introspection, and Haskell does not currently provide
+% that.
+
+
+\section{Faking it}
+
+We have not yet implemented statics in GHC, but we have implemented
+some simple workarounds that allow us (and you, gentle reader) to experiement
+with them without changing GHC.  We describe these workarounds in this section.
+
+\subsection{Example}
+As a running example, here is the code for \textt{sfun} using the workarounds:
+\begin{code}
+  sf :: SendPort (Closure (Int -> Int)) 
+     -> Int -> ProcessM ()
+  sf ch x = send ch ($(mkClo 'add1) x)
+
+  add1 :: Int -> Int -> Int
+  add1 x y = x + y + 1
+
+  $(remotable ['add1])
+\end{code}
+The programmer still has to do manual closure conversion, by defining
+a top-level function (\textt{add1} in this case) whose first argument is
+the environment.  However, the code is otherwise significantly more 
+straightforward than in Section~\ref{s:closures-in-practice}.
+
+The Template Haskell splice \textt{$(mkClo 'add1)}
+is run at compile time.  Its argument \textt{'add1} is Template Haskell notation
+for the (quoted) name of the \textt{add1} function.
+\begin{code}
+  mkClo :: Name -> Q Exp
+\end{code}
+The splice expands to a call to \textt{add1__closure}, 
+so the net result is just as if we had written
+\begin{code}
+  sf ch x = send ch (add1__closure x)
+\end{code}
+What is \textt{add1__closure}?  It is a new top-level definition
+added by the Template Haskell splice \textt{$(remotable ['add1])}.
+\begin{code}
+  remotable :: [Name] -> Q [Dec]
+\end{code}
+This splice expands to the following definitions
+\begin{code}
+  add1_closure :: Int -> Closure Int
+  add1_closure x = MkClo (MkS "M.add1") (encode x)
+
+  add1_dec :: ByteString -> Int -> Int
+  add_dec bs = add1 (decode bs)
+
+  __remoteTable :: [(String, Dynamic)]
+  _remoteTable = [("add1", toDyn add1_dec)]
+\end{code}
+
+\subsection{How it works}
+
+We fake the \textt{Static} type by a simple string, which will serve as the 
+label of the function to call at the other end
+\begin{code}
+  newtype Static a = MkS String
+\end{code}
+We maintain in the \textt{ProcessM} monad a table mapping these strings
+to the appropriate implementation composed with the environment deserialiser,
+\texttt{add1\_dec} in our example.
+This table is initialised by the call to \textt{runRemote} which initialised the
+\textt{ProcessM} monad, and may be consulted from within the monad, using these
+two functions:
+\begin{code}
+  runRemote    :: [[(String,Dynamic)]
+               -> ProcessM () -> IO ()
+  lookupStatic :: Typeable a => String -> ProcessM a
+\end{code}
+The \textt{lookupStatic} function looks up the function in the table,
+and performs a run-time typecheck to ensure that the value returned
+has the type expected by the caller.  Our fake implementation of
+statics is therefore still type-safe; it's just that the checks happen
+at runtime.  If either the lookup or typecheck fail, the entire 
+process crashes, consistent with Erlang's philosophy of crash-and-recover.
+
+Tiresomely, the programmer must:
+\begin{itemize}
+\item In each module, write one call \textt{$(remotable [...])},
+passing a list of all the functions passed to \textt{mkClo}.
+\item In the call to \texttt{runRemove}, passing a list
+a list of all the \textt{\_\_remoteTable} definitions in each module.
+\end{itemize}
+
+Finally, the closure un-wrapping process is now monadic, which is
+a little less convenient for the programmer:
+\begin{code}
+  unClosure :: Typeable a => Closure a -> ProcessM a
+  unClosure (MkClo (MkS s) env)
+    = do { f <- lookupStatic s
+         ; return (f env) }
+\end{code}
+
 
 % ----------------------------------------------- BEGIN ANDREW
 % 
@@ -751,126 +904,124 @@ crystal clear exactly what is serialised, and when.
 % 
 % 
 
-\section{Mapping statics and closures onto GHC}
 
-Unfortunately, our consideration of the \textt{Static} type 
-requires extensions to the underlying language, and Haskell does not currently provide these extensions. How, then, to proceed?
-
-Our definition in the previous section allows a serializable representation of any staticable function, where a staticable function is a top-level function or a function whose free variables are staticable. A reasonable approximation of the set of staticable functions is the set of top-level functions, and as it turns out, providing serializable representations of any top-level function is a much easier goal than providing serializable representations of any staticable function; in fact, with this minor restriction, we are able to implement this feature, and the closures that depend on it, without extending the language. Furthermore, we feel that limiting serializability to top-level functions isn't a major additional restriction, since any staticable function can be trivially made top-level. Finally, top-level functions are all automatically staticable and cannot capture non-staticable names from their environment, and so are guaranteed to be safe to serialize.
-
-The difficult part of function representation is that whatever identifier we use for a particular function must be unique and recognizable on both sides of the communication. Function pointers, while useful for representing functions on a single system, aren't a valid option in a distributed environment, since the remote system might have a different pointer width, and even if it doesn't variations in compiler and operating system render function pointers incomparable between computers. If we could select a unique identifier for each serializable function and transmit that identifier in place of the function itself, the receiving end would only need to map the identifier back to the original function, and we will have achieved our goal of transmitting a function representation. Such an identifier could take the place of the \textt{Static} type in \textt{Closure}s.
-
-Fortunately, since we've restricted the set of serializable functions to top-level functions, we already have a convenient, globally unique identifier for each such function: its fully-qualified name. Here, a fully-qualified name consists of the module in which the function is defined and the name of the function, separated by a period. We can now consider yet another version of the \textt{Closure} data structure:
-
-\begin{code}
--- correct!
-data Closure a = Closure String ByteString
-\end{code}
-
-We've replaced the theoretical \textt{Static} type wrapper with a string, which stores the fully-qualified name of the represented function. Its parameters remain encoded as a \textt{ByteString}. Note that the function named by the string must have type \textt{ByteString -> a}. Before we can make this version of \textt{Closure} work, though, we need a way of mapping functions to their names, and those names back to the original function. This is not trivial, since Haskell does not provide run-time name lookup services.
-
-We must provide a name lookup service ourselves. We want a table that maps function names to functions. This means that in order to execute a closure and get its value, \textt{unClosure} needs access to this table. For convenience, we've put this table of function names in the \textt{ProcessM} monad, and so it see it, we need to revise \textt{unClosure}'s type:
-
-\begin{code}
--- correct!
-unClosure :: Closure a -> ProcessM a
-\end{code}
-
-How would we construct such a lookup table? It would look something like this:
-
-We might construct such a table for the \textt{greet} and \textt{add} functions like this:
-
-\begin{code}
--- wrong
-let lookupTable =
-  putReg "Main.add" add
-    (putReg "Main.greet" greet LEnd)
-\end{code}
-
-Here we see that the functions are of the wrong type. Since the closure stores the function's environment as a \textt{ByteString}, \textt{unClosure} expects that the function named in the closure will have type \textt{ByteString -> a}, but here \textt{add} has type \textt{Int -> Int -> Int} and \textt{greet} has type \textt{String -> ProcessM ()}. We will need to write a wrapper function to decode the environment and call the original function:
-
-\begin{code}
--- correct, but inconvenient
-
-addWrapper :: ByteString -> Int
-addWrapper bs = 
-  let (i1, i2) = decode bs
-   in add i1 i2
-
-greetWrapper :: ByteString -> ProcessM ()
-greetWrapper bs =
-  let s = decode bs
-   in greet s             
-
-let lookupTable =
-  putReg "Main.add" addWrapper
-    (putReg "Main.greet" greetWrapper LEnd)
-\end{code}
-
-What can happen if something goes wrong? What, for example, will happen if we have different code on the two sides of communication? If the function named in the closure doesn't exist on the other side, looking it up in the function table will fail, and \textt{spawn} can report the error to the programmer. More insidiously, what if a function of the same name exists, but with a different environment? In this case, depending on how the types differs, it's possible for the environment's deserialization to not fail, but to succeed by extracting incorrect values from the \textt{ByteString}, which is worse than failing. We can eliminate this risk by including a representation of the environment type in the closure, and checking this type against the expected type on the remote end. In our implementation, we package the \textt{ByteString} of the function's environment along with a string representation of the environment's type.
-
-
-\subsection{Closures, with sugar}
-
-The method given above for remotely invoking a closure seems prohibitively cumbersome. First, the programmer has to write a parameter-decoding wrapper function for each function that can be invoked remotely. Then, he or she needs to add a corresponding entry to the function lookup table, so that the closure can be invoked. Finally, he or she needs to manually create a closure and give it to \textt{spawn} or \textt{call}. It is certainly a far cry from our idealized (and wrong) notion of just writing \textt{spawn someNode (add 2 3)}.
-
-Fortunately, the Template Haskell facility lets us generate some sugar for all this which simplifies the procedure greatly. Template Haskell provides compile-time rewriting facilities that can automagically generate appropriate wrapping functions and lookup tables. Our framework includes a compile-time \textt{remotable} function that operates on lists of function names and automatically produces wrapper functions and closure-generators that can be used with \textt{spawn} and similar functions. Let's revisit the example with \textt{add}. The programmer can request generation of the requisite stub functions using this syntax:
-
-\begin{code}
-$( remotable ['add] )
-\end{code}
-% $
-
-Here, the special brackets \textt{\$( )} demarcate code to be executed at compile time. The \textt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \textt{remotable} call will produce the following code:
-
-\begin{code}
--- a deserializing wrapper
-add__impl :: ByteString -> Int
-add__impl bs =
-  let (a1, a2) = decode bs
-   in add a1 a2
-
--- a closure maker
-add__closure :: Int -> Int -> Closure Int
-add__closure a2 a2 = 
-  let bs = encode (a1, a2)
-   in Closure "Main.add__impl" bs
-
--- the lookup table
-__remoteCallMetaData = 
-  putReg "Main.add__impl" add__impl LEnd
-\end{code}
-
-\textt{remotable} has generated the boilerplate code necessary for invoking \textt{add} remotely, while leaving the original  unchanged. Because \textt{remotable} is run at compile time, it has access to the abstract syntax tree of the module we're compiling, and so can examine the \textt{add}'s name and type. Equivalent functionality couldn't be achieved at run-time. \textt{remotable} first gives us \textt{add__impl}, the decoding wrapper, which is identical to the hand-written \textt{addWrapper} above. \textt{add__closure} is a convenience function that creates a closure of the wrapping function, serializing its arguments along the way. And \textt{__remoteCallMetaData} is the lookup table, which will be given to the framework's startup code and referred to by \textt{unClosure}. \textt{add} itself is not in the lookup table, nor should it be: \textt{unClosure} expects that functions in the table will be of type \textt{ByteString-> t}, and the only function of that type here is \textt{add__impl}. Notice that the types of the arguments to \textt{add} are not explicitly given above. Instead, the compiler can infer them from the definition.
-
-Now, when the programmer wants to remotely invoke \textt{add}, all that's necessary is to use \textt{add__closure} in place of \textt{add}:
-
-\begin{code}
--- correct!
-res <- call aNode (add__closure 5 12)
-\end{code}
-
-If we add \textt{greet} to \textt{remotable}'s parameter list, then corresponding support code will be generated for it, as well, allowing us to call it like so:
-
-\begin{code}
--- correct!
-spawn aNode (greet__closure "Zoltan")
-\end{code}
-
-Notice that this is much more convenient than constructing closures manually, and the syntax to invoke code remotely is comfortingly similar to what we initially wanted to write, back at the beginning of this section. We can now even implement the ping-pong example that motivated our consideration of process spawning:
-
-\begin{code}
--- correct!
-do { pingProc <- spawn someNode ping__closure
-   ; pongProc <- spawn otherNode pong__closure
-   ; send pingProc (Pong pongProc) }
-\end{code}
-
-\subsection{Limitations}
-
-There are some limitations in our approach to remote function invocation. First, since functions are looked up by name, only top-level functions can be called remotely. Also, since the wrapper function needs to know the type of the parameters to the function in order to deserialize them, this approach won't work with polymorphic functions.
-
-A more intrusive drawback of our approach is that serialization cannot handle existential data types or generalized abstract data types (GADTs) at all. That is, no remotely invoked function can accept an existential or GADT parameter or return such a type. The problem is that these extended Haskell types can hide constituent data types that are not reflected in the signature of the enclosing type. As a result, the type-based dispatch for serializing and deserializing them has no way to know which concrete serializer and deserializer to invoke. As far as we know, serializing existentials and GADTs would require some form of run-time introspection, and Haskell does not currently provide that.
+% Unfortunately, our consideration of the \textt{Static} type 
+% requires extensions to the underlying language, and Haskell does not currently provide these extensions. How, then, to proceed?
+% 
+% Our definition in the previous section allows a serializable representation of any staticable function, where a staticable function is a top-level function or a function whose free variables are staticable. A reasonable approximation of the set of staticable functions is the set of top-level functions, and as it turns out, providing serializable representations of any top-level function is a much easier goal than providing serializable representations of any staticable function; in fact, with this minor restriction, we are able to implement this feature, and the closures that depend on it, without extending the language. Furthermore, we feel that limiting serializability to top-level functions isn't a major additional restriction, since any staticable function can be trivially made top-level. Finally, top-level functions are all automatically staticable and cannot capture non-staticable names from their environment, and so are guaranteed to be safe to serialize.
+% 
+% The difficult part of function representation is that whatever identifier we use for a particular function must be unique and recognizable on both sides of the communication. Function pointers, while useful for representing functions on a single system, aren't a valid option in a distributed environment, since the remote system might have a different pointer width, and even if it doesn't variations in compiler and operating system render function pointers incomparable between computers. If we could select a unique identifier for each serializable function and transmit that identifier in place of the function itself, the receiving end would only need to map the identifier back to the original function, and we will have achieved our goal of transmitting a function representation. Such an identifier could take the place of the \textt{Static} type in \textt{Closure}s.
+% 
+% Fortunately, since we've restricted the set of serializable functions to top-level functions, we already have a convenient, globally unique identifier for each such function: its fully-qualified name. Here, a fully-qualified name consists of the module in which the function is defined and the name of the function, separated by a period. We can now consider yet another version of the \textt{Closure} data structure:
+% 
+% \begin{code}
+% -- correct!
+% data Closure a = Closure String ByteString
+% \end{code}
+% 
+% We've replaced the theoretical \textt{Static} type wrapper with a string, which stores the fully-qualified name of the represented function. Its parameters remain encoded as a \textt{ByteString}. Note that the function named by the string must have type \textt{ByteString -> a}. Before we can make this version of \textt{Closure} work, though, we need a way of mapping functions to their names, and those names back to the original function. This is not trivial, since Haskell does not provide run-time name lookup services.
+% 
+% We must provide a name lookup service ourselves. We want a table that maps function names to functions. This means that in order to execute a closure and get its value, \textt{unClosure} needs access to this table. For convenience, we've put this table of function names in the \textt{ProcessM} monad, and so it see it, we need to revise \textt{unClosure}'s type:
+% 
+% \begin{code}
+% -- correct!
+% unClosure :: Closure a -> ProcessM a
+% \end{code}
+% 
+% How would we construct such a lookup table? It would look something like this:
+% 
+% We might construct such a table for the \textt{greet} and \textt{add} functions like this:
+% 
+% \begin{code}
+% -- wrong
+% let lookupTable =
+%   putReg "Main.add" add
+%     (putReg "Main.greet" greet LEnd)
+% \end{code}
+% 
+% Here we see that the functions are of the wrong type. Since the closure stores the function's environment as a \textt{ByteString}, \textt{unClosure} expects that the function named in the closure will have type \textt{ByteString -> a}, but here \textt{add} has type \textt{Int -> Int -> Int} and \textt{greet} has type \textt{String -> ProcessM ()}. We will need to write a wrapper function to decode the environment and call the original function:
+% 
+% \begin{code}
+% -- correct, but inconvenient
+% 
+% addWrapper :: ByteString -> Int
+% addWrapper bs = 
+%   let (i1, i2) = decode bs
+%    in add i1 i2
+% 
+% greetWrapper :: ByteString -> ProcessM ()
+% greetWrapper bs =
+%   let s = decode bs
+%    in greet s             
+% 
+% let lookupTable =
+%   putReg "Main.add" addWrapper
+%     (putReg "Main.greet" greetWrapper LEnd)
+% \end{code}
+% 
+% What can happen if something goes wrong? What, for example, will happen if we have different code on the two sides of communication? If the function named in the closure doesn't exist on the other side, looking it up in the function table will fail, and \textt{spawn} can report the error to the programmer. More insidiously, what if a function of the same name exists, but with a different environment? In this case, depending on how the types differs, it's possible for the environment's deserialization to not fail, but to succeed by extracting incorrect values from the \textt{ByteString}, which is worse than failing. We can eliminate this risk by including a representation of the environment type in the closure, and checking this type against the expected type on the remote end. In our implementation, we package the \textt{ByteString} of the function's environment along with a string representation of the environment's type.
+% 
+% 
+% \subsection{Closures, with sugar}
+% 
+% The method given above for remotely invoking a closure seems prohibitively cumbersome. First, the programmer has to write a parameter-decoding wrapper function for each function that can be invoked remotely. Then, he or she needs to add a corresponding entry to the function lookup table, so that the closure can be invoked. Finally, he or she needs to manually create a closure and give it to \textt{spawn} or \textt{call}. It is certainly a far cry from our idealized (and wrong) notion of just writing \textt{spawn someNode (add 2 3)}.
+% 
+% Fortunately, the Template Haskell facility lets us generate some sugar for all this which simplifies the procedure greatly. Template Haskell provides compile-time rewriting facilities that can automagically generate appropriate wrapping functions and lookup tables. Our framework includes a compile-time \textt{remotable} function that operates on lists of function names and automatically produces wrapper functions and closure-generators that can be used with \textt{spawn} and similar functions. Let's revisit the example with \textt{add}. The programmer can request generation of the requisite stub functions using this syntax:
+% 
+% \begin{code}
+% $( remotable ['add] )
+% \end{code}
+% % $
+% 
+% Here, the special brackets \textt{\$( )} demarcate code to be executed at compile time. The \textt{remotable} function is given a list of function names, each quoted with a single apostrophe to prevent its evaluation. The above \textt{remotable} call will produce the following code:
+% 
+% \begin{code}
+% -- a deserializing wrapper
+% add__impl :: ByteString -> Int
+% add__impl bs =
+%   let (a1, a2) = decode bs
+%    in add a1 a2
+% 
+% -- a closure maker
+% add__closure :: Int -> Int -> Closure Int
+% add__closure a2 a2 = 
+%   let bs = encode (a1, a2)
+%    in Closure "Main.add__impl" bs
+% 
+% -- the lookup table
+% __remoteCallMetaData = 
+%   putReg "Main.add__impl" add__impl LEnd
+% \end{code}
+% 
+% \textt{remotable} has generated the boilerplate code necessary for invoking \textt{add} remotely, while leaving the original  unchanged. Because \textt{remotable} is run at compile time, it has access to the abstract syntax tree of the module we're compiling, and so can examine the \textt{add}'s name and type. Equivalent functionality couldn't be achieved at run-time. \textt{remotable} first gives us \textt{add__impl}, the decoding wrapper, which is identical to the hand-written \textt{addWrapper} above. \textt{add__closure} is a convenience function that creates a closure of the wrapping function, serializing its arguments along the way. And \textt{__remoteCallMetaData} is the lookup table, which will be given to the framework's startup code and referred to by \textt{unClosure}. \textt{add} itself is not in the lookup table, nor should it be: \textt{unClosure} expects that functions in the table will be of type \textt{ByteString-> t}, and the only function of that type here is \textt{add__impl}. Notice that the types of the arguments to \textt{add} are not explicitly given above. Instead, the compiler can infer them from the definition.
+% 
+% Now, when the programmer wants to remotely invoke \textt{add}, all that's necessary is to use \textt{add__closure} in place of \textt{add}:
+% 
+% \begin{code}
+% -- correct!
+% res <- call aNode (add__closure 5 12)
+% \end{code}
+% 
+% If we add \textt{greet} to \textt{remotable}'s parameter list, then corresponding support code will be generated for it, as well, allowing us to call it like so:
+% 
+% \begin{code}
+% -- correct!
+% spawn aNode (greet__closure "Zoltan")
+% \end{code}
+% 
+% Notice that this is much more convenient than constructing closures manually, and the syntax to invoke code remotely is comfortingly similar to what we initially wanted to write, back at the beginning of this section. We can now even implement the ping-pong example that motivated our consideration of process spawning:
+% 
+% \begin{code}
+% -- correct!
+% do { pingProc <- spawn someNode ping__closure
+%    ; pongProc <- spawn otherNode pong__closure
+%    ; send pingProc (Pong pongProc) }
+% \end{code}
+% 
+% \subsection{Limitations}
+% 
+% There are some limitations in our approach to remote function invocation. First, since functions are looked up by name, only top-level functions can be called remotely. Also, since the wrapper function needs to know the type of the parameters to the function in order to deserialize them, this approach won't work with polymorphic functions.
+% 
 
 % other features? channel combining, peer discovery, multiple nodes per machine
 
