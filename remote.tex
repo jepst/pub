@@ -424,7 +424,7 @@ math() ->
   math().
 \end{lstlisting}
 
-This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, expressed as tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, it matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
+This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, expressed as tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, the pattern matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
 
 Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use Haskell's type system. For each distinct message, distinguished in Erlang by the first member of the tuple, we will have a separate type. Thus, we can imagine these types:
 
@@ -484,6 +484,38 @@ expect :: (Serializable a) => ProcessM a
 expect = receiveWait [match return]
 \end{code}
 
+Whether we use \textt{receiveWait} directly or \textt{expect}, we run the risk that the function will block until a certain type of message arrives. What if we want to check the incoming message queue, but not wait indefinitely? Erlang lets us do this with the \textt{receive...after} syntax:
+
+\begin{lstlisting}[language=Erlang,escapeinside={\%}{\^^M}]
+Pid ! {query, Stuff},
+receive
+  {response, Answer} ->
+    show_answer(Answer)
+after
+  50000 ->
+    show_error("Timeout!")
+end
+\end{lstlisting}
+
+This code will wait at most 50 seconds to receive a response to its query; after 50 seconds, it will stop waiting and display an error message. Our framework's corresponding function is \textt{receiveTimeout}, which is very similar to \textt{receiveWait}. Like \textt{receiveWait}, it takes a list of \textt{match}es, but it also takes a timeout value. If the timeout is exceeded, the function returns \textt{Nothing}.
+
+\begin{code}
+receiveTimeout :: Int -> [MatchM q ()] -> ProcessM (Maybe q)
+\end{code}
+
+Thus we can translate the Erlang example into Haskelll:
+
+\begin{code}
+do { send pid (Query stuff)
+   ; ret <- receiveTimeout 50000
+       [ match(\(Response answer) -> 
+            return answer)  ]
+   ; case res of
+       Nothing -> showError "Timeout!"
+       Just ans -> showAnswer ans
+\end{code}
+%\)
+
 \section{Messages through channels}
 In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \textt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
 
@@ -498,7 +530,7 @@ sendChan :: Serializable a => SendPort a -> a -> ProcessM ()
 receiveChan :: Serializable a => ReceivePort a -> ProcessM a
 \end{code}}
 
-A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
+A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity \je{why is this wrong?}. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
 
 We can now reformulate our ping example to use typed channels. The process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \textt{Ping} and \textt{Pong} message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and the \textt{Pong} message contains the send port of a channel of pings.
 
@@ -513,28 +545,12 @@ ping2 pingout pongin =
 
 How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
 
-\spj{Somwhere we need to say that send-ports are serializable and read-ports are not. It's a key property!
-Indeed that is why we distinguish the end-points.}
-
+\subsection{Combining ports}
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive one message of known type. Where, then, is the analogous //!!
 
 \section{Closures}
 \label{Closures}
-\begin{comment}
-there's no way for a library to know what to transmit, or even if it's serializable. Clearly, we don't want to prevent remotely-invocable functions from ever using non-serializable data. That would mean that any function that could be started using \textt{spawn} wouldn't be allowed to use \textt{MVar}.
 
-all parameters to closure must be serializable
-
-I agree that all we need to do to represent deferred evaluation is a
-<fun,arg> tuple, and that's basically what a Closure is. We'll still
-serialize arbitrarily-sized environments, as long as they are
-converted explicitly to an argument, and that explicit control is an
-advantage. And, yes, the practical argument that implicitly
-serializing environments would be messy to implement is also valid.
-
-only local and global names are visible in a top-level function. This is a reasonable approximation because all toplevel names are always available on all hosts and never need to be transmitted
-
-prevention of sharing bad things (e.g. mvars, receiveports) is enforced by the serializer
-\end{comment}
 % ----------------------------------------------- BEGIN SIMON
 
 Any distributed implementation of a statically-typed, 
@@ -542,8 +558,8 @@ higher-order programming language must
 grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
-  sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf p x = send p (\y -> x+y+1)
+  sendFunc :: SendPort (Int -> Int) -> Int -> ProcessM ()
+  sendFunc p x = sendChan p (\y -> x+y+1)
 \end{code}
 \texttt{sf} is a function that creates an anonymous function and sends it on Port\texttt{p}.   The function that it sends, \texttt{($\lambda$y -> x+y)},
 is a closure that captures its free variables,
@@ -560,12 +576,13 @@ declaration
 One ``solution'' would be to say that functions are simply not
 serializable --- but exactly the same issue arises with \textt{spawn}:
 \begin{code}
-newComputation = 
-  do { (s,r) <- newChan
-      ; spawn node (do { answer <- longComputation
-                  	   ; sendChan s answer })
-      ; receiveChan r}
+  nc :: ProcessM ()
+  nc = do { (s,r) <- newChan
+          ; spawn node (do { ...ans...
+                           ; sendChan s ans })
+          ; ... }
 \end{code}
+\je{I don't understand what you're trying to show with this example.}
 The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
 its free variables, \textt{s}.
 Thus, serializing this argument requires serializing a function with a free variable.
@@ -796,13 +813,13 @@ expressed using closures:
 \begin{code}
   sf :: SendPort (Closure (Int -> Int)) 
      -> Int -> ProcessM ()
-  sf ch x = send ch clo
+  sf ch x = sendChan ch clo
     where
       clo  = MkClosure (static sfun) (encode x)
 
   sfun :: ByteString -> Int -> Int
   sfun = \bs -> let x = decode bs 
-             in \y -> x + y + 1)
+             in \y -> x + y + 1
 \end{code}
 The closure contains the pre-serialized environment \textt{encode x},
 and the static function \textt{sfun}. The latter deserializes its
@@ -864,7 +881,7 @@ As a running example, here is the code for \textt{sfun} using the workarounds:
 \begin{code}
   sf :: SendPort (Closure (Int -> Int)) 
      -> Int -> ProcessM ()
-  sf ch x = send ch ($(mkClosure 'add1) x)
+  sf ch x = sendChan ch ($(mkClosure 'add1) x)
 
   add1 :: Int -> Int -> Int
   add1 x y = x + y + 1
@@ -885,7 +902,7 @@ for the (quoted) name of the \textt{add1} function.
 The splice expands to a call to \textt{add1__closure}, 
 so the net result is just as if we had written
 \begin{code}
-  sf ch x = send ch (add1__closure x)
+  sf ch x = sendChan ch (add1__closure x)
 \end{code}
 What is \textt{add1__closure}?  It is a new top-level definition
 added by the Template Haskell splice \textt{$(remotable ['add1])}.
@@ -1208,7 +1225,7 @@ As a practical example, we present a complete, albeit trivial, example of a dist
 % maybe do fgrep example too? k-means
 HOW TO DEPLOY, SET UP CONFIG FILE, ETC
 
-\begin{code}
+\begin{lstlisting}[numbers=left,language=Haskell,escapeinside={--}{\^^M}]
 module Main where
 -- omitted: module imports
 data CounterMessage = CounterQuery ProcessId
@@ -1259,7 +1276,7 @@ go "WORKER" =
 
 main = runRemote (Just "config")
         [Main.__remoteTable] go
-\end{code}
+\end{lstlisting}
 % $
 
 When the program starts, it first calls the framework's \textt{remoteInit} function, which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{remoteInit} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{remoteInit} in order to be able to invoke closures.
