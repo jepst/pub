@@ -27,8 +27,29 @@
 % authoryear    To obtain author/year citation style instead of numeric.
 
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{listings}
+\usepackage[pdftex]{graphicx}
 \usepackage{verbatim} % only for comment environment
+\usepackage{ifthen}
+
+\graphicspath{{figures/}}
+\DeclareGraphicsExtensions{.pdf, .png, .ps}   % NOT .jpg  because it throws away the detail.
+
+\newboolean{showcomments}
+\setboolean{showcomments}{true}
+\ifthenelse{\boolean{showcomments}}
+  {\newcommand{\nb}[2]{
+    \fbox{\bfseries\sffamily\scriptsize#1}
+    {\sf\small$\blacktriangleright$\textit{#2}$\blacktriangleleft$}
+    % \marginpar{\fbox{\bfseries\sffamily#1}}
+   }
+  }
+  {\newcommand{\nb}[2]{}
+  }
+\newcommand\apb[1]{\nb{apb}{#1}}
+\newcommand\spj[1]{\nb{spj}{#1}}
+\newcommand\je[1]{\nb{jeff}{#1}}
 
 \begin{document}
 
@@ -126,11 +147,16 @@ keyword1, keyword2
 With the age of steadily improving processor performance behind us, the way forward is to compute with more, rather than faster, processors. A data center that makes available a large number of processors for storing and processing users' data, or running users' programs, is termed a \emph{cloud}. We'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
 
 How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using conventional shared-memory concurrency primitives, such as locks and transactions. 
-We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  For example, 
+We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
+\spj{Not a strong argument.  Message passing is always availble for shared memory machines and people don't use it much.  It's just
+too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
+For example, 
 $<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
-The second objection is that, to be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
+The second objection is that, to be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. \spj{Not just data movement, but
+cost of synchronisation too.  Eg distributed STM would be a disaster.}
 
-Instead, we turn to a solution, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly copied by sending and receiving {\em messages}.  Not only does this make the costs of communication apparent; it also eliminates many of the classic concurrency pitfalls, such as race conditions.
+Instead, we turn to a solution, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly copied by sending and receiving {\em messages}.  Not only does this make the costs of communication apparent; it also eliminates many of the classic concurrency pitfalls, such as race conditions. \spj{Again, I'd drop the race condition argument, and substitute the 
+good failure model supported by message passing.}
 
 Developing for the cloud presents other challenges.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; a programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang is has a solution that has stood the test of time; the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
 
@@ -142,7 +168,7 @@ Monadic types make it convenient to program in an effectful style when that is a
 
 The contributions of this paper are:
 \begin{itemize}
-\item An interface for distributed programming in Haskell (Section \ref{Processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, we provide functions for starting new threads remotely, and for fault tolerance, which closely follow the widely-respected Erlang model. Unlike Erlang, our framework does not prohibit the use of explicit shared memory concurrency mechanisms \emph{within} one of our concurrent processes.
+\item An interface for distributed programming in Haskell (Section \ref{Processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, we provide functions for starting new threads remotely, and for fault tolerance, which closely follow the widely-respected Erlang model. Unlike Erlang, our framework supports the use of explicit shared-memory concurrency mechanisms \emph{within} one of our concurrent processes.
 
 \item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{Closures}). Starting a remote process demands a representation of code objects and their environment. Our approach to closures requires a \emph{explicit} indication of which parts of the function's environment will be serialized, and thus gives the programmer control over the cost of data movement.
 
@@ -154,26 +180,35 @@ The contributions of this paper are:
 \subsection{Processes}
 The basic unit of concurrency in our framework is the {\em process}. A process is a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
+\begin{figure}
+\centerline {
+\includegraphics[width=\columnwidth]{threadsAndProcesses}
+}
+\caption{ \label{fig:ProcessBubbles}
+Processes A and B do not share memory, even though they are running on the same physical processor; instead they communicate over channels, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \texttt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \texttt{ProcessM} monad; threads, in contrast, execute in the \texttt{IO} monad.
+}
+\end{figure}
+
+In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a signle process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems.  \spj{Explain how!! This is very far from obvious and it's a key advantage.}
 
 \subsection{Messages to processes}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered. This functionality is implemented in the \textt{ProcessM} monad, such that all the state associated with messaging (most especially, the message queue) is wrapped in that data structure, which is updated with each statement. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
 
 Consider a simple process that accepts ``pong'' messages and responds by sending a corresponding ``ping'' to whatever process sent the pong. Using our framework, the code for such a process would look like this:
-
+\spj{I thought we were just going to use send and receive, not receiveWait and match?}
 \begin{code}[caption={Ping in Haskell}]
 data Ping = Ping ProcessId
 data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
 
 ping :: ProcessM ()
-ping self = 
+ping = 
    do { self <- getSelfPid
         receiveWait [
           match (\ (Pong partner) -> 
             send partner (Ping self)) ]
-      ; ping self }
+      ; ping }
 \end{code}
 
 The equivalent code in Erlang looks like this:
@@ -191,6 +226,10 @@ These two programs have nearly identical structure. Both \textt{ping} functions 
 
 If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete, as the instance declarations have been omitted for brevity.
 
+\subsection{Sending messages and the \textt{Serialisable} class}
+
+\spj{Check for consistent spelling of serialise/serialize}
+\spj{Somewhere we need to talk about Binary, and the relation of encode/decode to get/put.}
 Here we present some of the important functions that form the messaging API of our framework.
 
 \begin{itemize}
@@ -201,8 +240,12 @@ send :: Serializable a => ProcessId -> a -> ProcessM ()
 
 To send a message, use \textt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \textt{Serializable} type class, as well as Haskell's \textt{Data.Binary.Binary} class, which allows the data to be converted to a form suitable for transmission. The \textt{send} function corresponds to Erlang's \texttt{!} operator.
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example of this is \textt{MVar}, Haskell's type for mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a process that has no shared memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model than \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use it in that way. Nevertheless, \textt{MVar}s can be used within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create local threads that can share memory using \textt{MVar}.
+\spj{What about receive?  Point out that parsing can fail, which makes use block, yes?}
 
+While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example of this is \textt{MVar}, Haskell's type for mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a process that has no shared memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model than \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use it in that way. Nevertheless, \textt{MVar}s can be used within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create local threads that can share memory using \textt{MVar}.
+\spj{``Felt it best'' is very weak.  It's a huge advantage that we can do this}
+
+\spj{Isn't all this match stuff supposed to be in Jeff's new section?}
 \item 
 \begin{code}
 receiveWait :: [MatchM q ()] -> ProcessM q
@@ -220,12 +263,13 @@ In the previous subsection, we've shown how a message can be sent to a process. 
 Thus, an alternative to sending messages by process identifier is to use {\em typed channels}. Each distributed channel consists of two ends, which we call the {\em send port} and {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are associated with a particular type and the send port will emit messages only of that type; likewise, the receive port will accept messages only of that type, so the sender has a guarantee that its receiver is of the right type.
 
 The central functions of the channel API are:
-
+\par{\small
 \begin{code}
-newChan :: Serializable a => ProcessM (SendPort a, ReceivePort a)
+newChan  :: Serializable a 
+         => ProcessM (SendPort a, ReceivePort a)
 sendChan :: Serializable a => SendPort a -> a -> ProcessM ()
 receiveChan :: Serializable a => ReceivePort a -> ProcessM a
-\end{code}
+\end{code}}
 
 A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
 
@@ -242,7 +286,11 @@ ping2 pingout pongin =
 
 How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
 
+\spj{Somwhere we need to say that send-ports are serialisable and read-ports are not. It's a key property!
+Indeed that is why we distinguish the end-points.}
+
 \subsection{Starting processes}
+\spj{This whole section needs a rewrite, and probably dramatically shortenig, in the light the closures section}
 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
@@ -298,14 +346,16 @@ monitorProcess :: ProcessId -> ProcessId
 
  \textbf{Initialization}
 \begin{code}
-remoteInit :: Maybe FilePath -> [RemoteCallMetaData] 
-           -> (String -> ProcessM ()) -> IO ()
-getPeers :: ProcessM PeerInfo
+type RemoteTable = [(String,Dynamic)]
+runRemote      :: Maybe FilePath -> [RemoteTable] 
+               -> (String -> ProcessM ()) -> IO ()
+getPeers       :: ProcessM PeerInfo
 findPeerByRole :: PeerInfo -> String -> [NodeId]
 \end{code}
 
  \textbf{Syntactic sugar}
 \begin{code}
+mkClo     :: Name   -> Q Exp
 remotable :: [Name] -> Q [Dec]
 \end{code}
 
@@ -322,6 +372,7 @@ class Binary t where put :: t -> Put; get :: Get t
 \end{code}
 \caption{A summary of the API} \label{fig:api}
 \end{figure}
+
 
 To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
 
@@ -375,8 +426,9 @@ A process can request to be notified in the event that another process terminate
 Here are the functions for setting up process monitoring:
 
 \begin{code}
-monitorProcess :: ProcessId -> ProcessId -> MonitorAction -> ProcessM ()
-linkProcess :: ProcessId -> ProcessM ()
+monitorProcess :: ProcessId -> ProcessId
+               -> MonitorAction -> ProcessM ()
+linkProcess    :: ProcessId -> ProcessM ()
 \end{code}
 
 \lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process will be notified by exception or by message.
@@ -413,13 +465,15 @@ grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
   sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf ch x = send ch (\y -> x+y+1)
+  sf p x = send p (\y -> x+y+1)
 \end{code}
-A function value is a closure that captures its free variables,
-\textt{x} in the example, so to serialise a function value
-one must serialise its free variables.  But the types of
+\texttt{sf} is a function that creates an anonymous function and sends it on Port\texttt{p}.   The function that it sends, \texttt{($\lambda$y -> x+y)},
+is a closure that captures its free variables,
+in this case \textt{x}; 
+in general, to serialise a function value requires that one must also serialise its free variables.  But the types of
 these free variables are unrelated to the type of the function
 value, so it is entirely unclear \emph{how} to serialise them.
+\apb{in a library that knows only the type of the function itself}.
 In concrete terms, there is no way to write this instance
 declaration
 \begin{code}
@@ -451,6 +505,8 @@ serialising their free variables, and adding a representation of their code.
 This approach is used by every higher-order distributed-memory 
 system that we know of, including GDH \cite{GDH}, JoCaml (check!!!), \emph{what else}.
 
+\apb{I don't think that this is true; I think that the standard solution is reflection.
+This does not have the first two disadvantages that you list, but t does have the third.}
 Making serialisability built-in
 has multiple disadvantages:
 \begin{itemize}
@@ -481,11 +537,13 @@ We begin with a simple intuituion: some closures can readily be
 transmitted to the other end of the wire, namely ones that have no
 free variables.  For the present we make a simplifying assumption,
 that every node is running the same code.  (We return to the question
-of code that varies between nodes in Section~\ref{s:further-work}.)
+of code that varies between nodes in Section~\ref{s:code-update}.)
 Under this assumption, a closure without free variables can be
 readily be serialised to a single label, or even (in the limit) a machine
-address.  Types classify values, so it is natural to suggest 
-a type $(\text{\tt Static}~\tau)$ to classify such values.  The type 
+address.  
+
+To distinguish values that can be readily serialised from those that cannot, we introduce a new type constructor
+$(\text{\tt Static}~\tau)$ to classify such values.  The type 
 constructor \textt{Static} is a new built-in primitive, 
 enjoying a built-in serialisation instance:
 \begin{code}
@@ -493,9 +551,9 @@ enjoying a built-in serialisation instance:
 \end{code}
 It is helpful to remember this intuition: \emph{the defining property of
 a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialised},
-can moreover can be serialised without knowledge of how to serialise $\tau$.
+moreover, that it can be serialised without knowledge of how to serialise $\tau$.
 Operationally, the implementation serialises a \textt{Static} value by first evaluating it,
-and then serialising the code label in the value thus obtained.  
+and then serialising the code label in the result of the evaluation.  
 
 \begin{figure}
 \begin{minipage}{\linewidth}
@@ -526,24 +584,25 @@ $$
 Along with the new type constructor we introduce a new term,
 $(\text{\tt static}\;e)$ to introduce it, and another 
 $(\text{\tt unstatic}\;e)$ to elimiate it.
-The simple typing judgements for these terms are given in Figure~\ref{fig:static}.
+The typing judgements for these terms are given in Figure~\ref{fig:static}.
 They embody the following key ideas:
 \begin{itemize}
 \item A \emph{variable is static} iff it is bound at the top level.
 \item A \emph{term $(\text{\tt static}\;e)$ has type $(\text{\tt Static}\;\tau)$} iff 
-(a) $e$ has type $\tau$, and (b) $e$ is static.  
+$e$ has type $\tau$, and $e$ is static.  
 \end{itemize}
 The type environment $\Gamma$ is a set of variable bindings, each of form $x :_{\delta} \sigma$.
 The subscript $\delta$ is a static-ness flag, which takes the values \textt{S} (static) or
 \textt{D} (dynamic).  The idea is that top-level (static) variables have bindings
-of form $f :_{\text{\tt S}}$, while all other variables have dynamic bindings $x :_{\text{\tt D}}$.
+of the form $f\! :_{\text{\tt S}}\! \sigma$, while all other variables have dynamic bindings 
+$x\! :_{\text{\tt D}}\!\sigma$.
 (It is straightforward to formalise this idea in the typing judgements for top-level
 bindings and for terms; we omit the details.)
-The operation $\Gamma \downarrow$ filters $\Gamma$ to leave only the static bindings,
-thereby checking that a term $\text{\tt static}\;e$ is only well typed if its free
-variables are all static.
+The operation $\Gamma \downarrow$ filters $\Gamma$ to leave only the
+static (top-level) bindings,thereby checking that a term $\text{\tt
+static}\;e$ is well typed only if all its free variables are static.
 
-Although simple, these rules have intersting consequences:
+Although simple, these rules have interesting consequences:
 \begin{itemize}
 \item A static variable may have a non-\textt{Static} type. Consider the 
 top-level binding for the identity function:
@@ -553,22 +612,25 @@ top-level binding for the identity function:
 \end{code}
 The function \textt{id} is by definition static (top-level).  Its binding
 in $\Gamma$ will have $\delta=\text{\tt S}$, but its type is the ordinary
-polymoprhic type.
+polymorphic type. However, \textt{(Static id)} has type \textt{(Static (a -> a))}.
+
 
 \item A non-static variable may have a \textt{Static} type.  For example
 \begin{code}
   f :: Static a -> (Static a, Int)
   f x = (x, 3)
 \end{code}
-Here \texttt{x} is clearly not a static variable, but it certainly has
+Here \texttt{x} is lambda-bound and so is not a static variable, but it certainly has
 a \textt{Static} type.  So fully-dynamic functions
 can readily compute over values of \textt{Static} type.
 
 \item The free variables of a term $(\text{\tt static}\;e)$ need not have
-type $(\text{\tt Static}\;\tau)$. For example, this term is well-typed:
+\text{\tt Static} types. For example, this term is well-typed:
+\par{\small
 \begin{code}
-  static (length . filter id) :: Static ([Bool] -> Int)
+static (length . filter id) :: Static ([Bool] -> Int)
 \end{code}
+}
 because all its free variables (\textt{length}, \textt{(.)},
 \textt{filter}, \textt{id}) are bound at top-level and hence are
 static. However, all these functions have their usual types.
@@ -577,17 +639,31 @@ static. However, all these functions have their usual types.
 \subsection{From static values to closures}
 
 In the examples \textt{sf} and
-\textt{nc} (at the start of this Section) we wanted to transmit closure
+\textt{nc} (at the start of this Section) we wanted to transmit closures
 that certainly did have free variables.  How do static values help us?
-Answer: they help us by making closure conversion possible. A closure
+They help us by making \emph{closure conversion} possible. A closure
 is just a pair of a code pointer and an environment.  With the aid of
 \textt{Static} values we can now represent a closure directly in Haskell:
 \begin{code}
 data Closure a where   -- Wrong
-  MkClo :: Static (env -> a) 
-        -> env -> Closure a
+  MkClo :: Static (e -> a) -> e -> Closure a
 \end{code}
-As is conventional, we capture the environment in an existential.
+As is conventional, we capture the environment in an existential\footnote{
+Existential because \textt{MkClo}'s type is isomorphic 
+to $\forall a. (\exists e. (e \to a) \times e) \to \text{\tt Closure}\;a$.
+}.
+\apb{More explanation needed.  Since there are no existential quantifiers here, this is hard to follow as written.  You have encoded the existential as an (unwritten) universal on the LHS of an arrow; this is not obvious!}
+Different closures of the same type may thereby capture environments
+of different type.  For example,
+\begin{code}
+  cs :: [Closure Int]
+  cs = [MkClo (static negate) 3,
+        MkClo (static ord)   'x']
+\end{code}
+Both closures in the list \textt{cs} have the same type \textt{Closure Int},
+but the first captures an \textt{Int} as its environment, while the second
+captures a \textt{Char}.  (The function \textt{ord} has type \textt{Char->Int}.)
+
 The trouble is that this closure type is not serialisable: precisely
 because the environment is existentially quantified, there is no information
 for how to serialise it!  This is apparently esay to solve, by asking
@@ -739,15 +815,16 @@ added by the Template Haskell splice \textt{$(remotable ['add1])}.
 \end{code}
 This splice expands to the following definitions
 \begin{code}
-  add1_closure :: Int -> Closure Int
-  add1_closure x = MkClo (MkS "M.add1") (encode x)
+  add1__closure :: Int -> Closure Int
+  add1__closure x = MkClo (MkS "M.add1") (encode x)
 
-  add1_dec :: ByteString -> Int -> Int
-  add_dec bs = add1 (decode bs)
+  add1__dec :: ByteString -> Int -> Int
+  add1__dec bs = add1 (decode bs)
 
   __remoteTable :: [(String, Dynamic)]
-  _remoteTable = [("add1", toDyn add1_dec)]
+  _remoteTable = [("add1", toDyn add1__dec)]
 \end{code}
+We will see how these definitions work next.
 
 \subsection{How it works}
 
@@ -756,14 +833,14 @@ label of the function to call at the other end
 \begin{code}
   newtype Static a = MkS String
 \end{code}
-We maintain in the \textt{ProcessM} monad a table mapping these strings
+We maintain a table in the \textt{ProcessM} monad, that maps these strings
 to the appropriate implementation composed with the environment deserialiser,
-\texttt{add1\_dec} in our example.
-This table is initialised by the call to \textt{runRemote} which initialised the
-\textt{ProcessM} monad, and may be consulted from within the monad, using these
-two functions:
+\texttt{add1\_\_dec} in our example.
+This table is initialised by the call to \textt{runRemote} which initialises the
+\textt{ProcessM} monad, and the table may be consulted from within the monad:
 \begin{code}
-  runRemote    :: [[(String,Dynamic)]
+  runRemote    :: Maybe FilePath
+               -> [[(String,Dynamic)]
                -> ProcessM () -> IO ()
   lookupStatic :: Typeable a => String -> ProcessM a
 \end{code}
@@ -774,15 +851,16 @@ statics is therefore still type-safe; it's just that the checks happen
 at runtime.  If either the lookup or typecheck fail, the entire 
 process crashes, consistent with Erlang's philosophy of crash-and-recover.
 
-Tiresomely, the programmer must:
+Tiresomely, the programmer has the following obligations:
 \begin{itemize}
 \item In each module, write one call \textt{$(remotable [...])},
 passing a list of all the functions passed to \textt{mkClo}.
-\item In the call to \texttt{runRemove}, passing a list
-a list of all the \textt{\_\_remoteTable} definitions in each module.
+\item In the call to \texttt{runRemote}, pass a list
+a list of all the \textt{\_\_remoteTable} definitions, imported from
+each module that has a call to \textt{remotable}.
 \end{itemize}
 
-Finally, the closure un-wrapping process is now monadic, which is
+Finally, the closure un-wrapping process becomes monadic, which is
 a little less convenient for the programmer:
 \begin{code}
   unClosure :: Typeable a => Closure a -> ProcessM a
@@ -1036,6 +1114,8 @@ Some of the features used in the framework include:
 \item The compile-time Template Haskell suite was used to write \textt{remotable}, which automatically generates code necessary to invoke remote functions.
 \end{itemize}
 
+\subsection{Dynamic code update} \label{s:code-update}
+
 Erlang has a nice feature that allows program modules to be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without even having to restart the application. We decided not to go in this direction with our framework, partly because code update is a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, where Erlang's bytecode interpreter retains more control over the loading and execution of programs.
 
 A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializing process.
@@ -1059,50 +1139,47 @@ data CounterMessage = CounterQuery ProcessId
 -- omitted: Serializable instance of CounterMessage
 
 counterLoop :: Int -> ProcessM ()
-counterLoop value =
-  let
-    counterCommand (CounterQuery pid) =
-      do { send pid value
-         ; return value }
-    counterCommand CounterIncrement =
-      return (value+1)
-    counterCommand CounterShutdown =
-      terminate
-  in receiveWait [match counterCommand]
-       >>= counterLoop
+counterLoop val
+  = do { val' <- receiveWait [match counterCommand]
+       ; counterLoop val' }
+  where
+    counterCommand (CounterQuery pid) 
+      = do { send pid val
+           ; return val }
+    counterCommand CounterIncrement 
+      = return (val+1)
+    counterCommand CounterShutdown
+      = terminate
 
 $( remotable ['counterLoop] )
 
 increment :: ProcessId -> ProcessM ()
-increment counterpid = send counterpid msg
-  where msg = CounterIncrement
+increment cpid = send cpid CounterIncremetn
 
 shutdown :: ProcessId -> ProcessM ()
-shutdown counterpid = send counterpid msg
-  where msg = CounterShutdown
+shutdown cpid = send cpid CounterShutdown
 
 query :: ProcessId -> ProcessM Int
 query counterpid =
   do { mypid <- getSelfPid
-     ; let msg = CounterQuery mypid
-     ; send counterpid msg
+     ; send counterpid (CounterQuery mypid)
      ; receiveWait [match return] }
 
 go "MASTER" =
   do { aNode <- liftM (head . flip 
          findPeerByRole "WORKER") getPeers
-     ; counterpid <- spawn aNode (counterLoop__closure 0)
-     ; increment counterpid
-     ; increment counterpid
-     ; newVal <- query counterpid
+     ; cpid <- spawn aNode ($(mkClo 'counterLoop) 0)
+     ; increment cpid
+     ; increment cpid
+     ; newVal <- query cpid
      ; say (show newVal)   -- prints out 2
-     ; shutdown counterpid }
+     ; shutdown cpid }
 
 go "WORKER" = 
   receiveWait []
 
-main = remoteInit (Just "config")
-        [Main.__remoteCallMetaData] go
+main = runRemote (Just "config")
+        [Main.__remoteTable] go
 \end{code}
 % $
 
