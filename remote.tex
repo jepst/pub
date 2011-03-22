@@ -79,12 +79,15 @@
 \copyrightyear{2011} 
 \copyrightdata{[to be supplied]} 
 
-\titlebanner{Haskell for the cloud}        % These are ignored unless
-\preprintfooter{Haskell for the cloud}   % 'preprint' option specified.
+\titlebanner{Haskell for the Cloud}        % These are ignored unless
+\preprintfooter{Haskell for the Cloud}   % 'preprint' option specified.
 
 
-% \renewcommand{\floatpagefraction}{0.95}
-% \renewcommand{\textfraction}{0.05}
+%\renewcommand{\textfraction}{0.05}
+%\renewcommand{\topfraction}{0.95}
+%\renewcommand{\bottomfraction}{0.95}
+%\renewcommand{\floatpagefraction}{0.35}
+%\setcounter{totalnumber}{5}
 
 
 %%%%% Andrew's commands
@@ -127,80 +130,94 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present a framework for developing Haskell programs to be run in a distributed-memory computing environment. It provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrent programming.
+We present a framework for developing Haskell programs to be run in a distributed-memory computing environment. It provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrency.
 
 \end{abstract}
 
-% \category{CR-number}{subcategory}{third-level}
-\category{D.1.3}{Programming Techniques}{Concurrent Programming---Distributed Programming}
-\category{D.3.2}{Programming Languages}{Haskell}
-%\category{D.3.2}{Programming Languages}{Applicative (functional) languages}
 
-\terms
-Languages, Reliability, Performance
-
-\keywords
-keyword1, keyword2
-
+%\category{D.1.3}{Programming Techniques}{Concurrent Programming---Distributed Programming}
+%\category{D.3.2}{Programming Languages}{Haskell}
+%
+%
+%\terms
+%Languages, Reliability, Performance, Distribution
+%
+%\keywords
+%Haskell, Erlang, message-passing
+%
 \section{Introduction}
 
-With the age of steadily improving processor performance behind us, the way forward is to compute with more, rather than faster, processors. A data center that makes available a large number of processors for storing and processing users' data, or running users' programs, is termed a \emph{cloud}. We'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
+With the age of steadily-improving processor performance behind us, we must learn to compute with more, rather than faster, processors. 
+A \emph{cloud} is data center that makes available a large number of processors for storing and processing users' data; we'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
 
 How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using conventional shared-memory concurrency primitives, such as locks and transactions. 
-We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
-\spj{Not a strong argument.  Message passing is always availble for shared memory machines and people don't use it much.  It's just
-too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
-For example, 
-$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
-The second objection is that, to be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. \spj{Not just data movement, but
-cost of synchronisation too.  Eg distributed STM would be a disaster.}
+%We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
+%\spj{Not a strong argument.  Message passing is always availble for shared memory machines and people don't use it much.  It's just
+%too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
+%For example, 
+%$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
+Although possible, we don't believe this to be the best way forward.
+To be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
+Synchronization is another major cost; while shared memory makes some synchronization explicit (locks, compare and swap), the synchronization implicit in the simulation of the memory itself, and in higher-level abstractions such as transactions, remains implicit.
 
-Instead, we turn to a solution, popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly copied by sending and receiving {\em messages}.  Not only does this make the costs of communication apparent; it also eliminates many of the classic concurrency pitfalls, such as race conditions. \spj{Again, I'd drop the race condition argument, and substitute the 
-good failure model supported by message passing.}
+Instead, we turn to a solution popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message-passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly sent in {\em messages}.  This make the costs of communication apparent.
+It also means that a concurrent process is natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
+%Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into memory.
 
-Developing for the cloud presents other challenges.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; a programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang is has a solution that has stood the test of time; the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
+Failure is a very real issue in the cloud; indeed, in many ways failure is the defining issue of distributed computation.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the whole computation from the beginning, the likelihood of it ever completing would get smaller and smaller as the system scaled up.  
+A programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang has a solution that has stood the test of time; 
+%the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We 
+we don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
 
 If Erlang has been so successful, you may wonder what Haskell brings to the table. 
-The short answer is: purity, types, and monads.  As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed.  More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. Another consequence of purity is that functions are idempotent; this means that code running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
-Types in general, and  type in particular, help to guarantee properties of programs statically.  
-For example, a pure function \emph{cannot} have the same type as one that has an externally-visible effect such as sending or receiving a message.  
+The short answer is: purity, types, and monads.  As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed.  More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. 
+Moreover, pure functions are idempotent; this means that functions running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
+Types in general, and monadic types in particular, help to guarantee properties of programs statically.  
+For example, a function that has an externally-visible effect such as sending or receiving a message \emph{cannot} have the same type as one that is pure.
 Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
 The contributions of this paper are:
 \begin{itemize}
-\item An interface for distributed programming in Haskell (Section \ref{Processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. Besides mechanisms for sending and receiving data, we provide functions for starting new threads remotely, and for fault tolerance, which closely follow the widely-respected Erlang model. Unlike Erlang, our framework supports the use of explicit shared-memory concurrency mechanisms \emph{within} one of our concurrent processes.
+\item An interface for distributed programming in Haskell (Section \ref{Processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. We also provide functions for starting new threads remotely, and for fault tolerance, which closely follow Erlang. 
+However, unlike Erlang, our framework supports the use of explicit shared-memory concurrency mechanisms \emph{within} one of our concurrent processes.
 
-\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{Closures}). Starting a remote process demands a representation of code objects and their environment. Our approach to closures requires a \emph{explicit} indication of which parts of the function's environment will be serialized, and thus gives the programmer control over the cost of data movement.
+\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{Closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
 
 \item A demonstration of the effectiveness of our approach in the form of example applications (Section \ref{Benchmarks}). We provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
 \end{itemize}
 
 \section{Processes and messages}
-\label{Processes}
 \subsection{Processes}
+%: \label{Processes}
+\label{Processes}
 The basic unit of concurrency in our framework is the {\em process}. A process is a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-\begin{figure}
+\begin{figure}[!b]
 \centerline {
 \includegraphics[width=\columnwidth]{threadsAndProcesses}
 }
-\caption{ \label{fig:ProcessBubbles}
-Processes A and B do not share memory, even though they are running on the same physical processor; instead they communicate over channels, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \texttt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \texttt{ProcessM} monad; threads, in contrast, execute in the \texttt{IO} monad.
+\caption{ 
+%: \label{fig:ProcessBubbles}
+\label{fig:ProcessBubbles}
+Processes A and B do not share memory, even though they are running on the same physical processor; instead they communicate by sending messages, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \texttt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \texttt{ProcessM} monad; threads, in contrast, execute in the \texttt{IO} monad.
 }
 \end{figure}
 
-In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a signle process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems.  \spj{Explain how!! This is very far from obvious and it's a key advantage.}
+In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
+We discuss this point further in Section~\ref{s:serialization}.
 
 \subsection{Messages to processes}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}:
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
+There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}}:
 
-\spj{Add a note (foot?) to explain why expect not receive.}
 \par{\small
 \begin{code}
-send :: (Serializable a) => ProcessId -> a -> ProcessM ()
+send :: (Serializable a) => ProcessId -> a 
+						-> ProcessM ()
 expect :: (Serializable a) => ProcessM a
 \end{code}}
+\noindent
 (These type signatures, and those of all of the functions mentioned in this paper, are collected in Figure~\ref{fig:api}.)
 
 Before we discuss these primitives in detail, let's look at an example of their use.
@@ -230,14 +247,16 @@ ping() -> receive
 
 These two programs have similar structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell \textt{expect} function matches incoming messages by type, whereas in Erlang, messages usually pattern-matched against tuples whose first element is a well-known atom. The programs wait for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload the process ID of a ``partner'', to whom the response message is sent; this message contains the process ID of the \textt{ping} process (\textt{self}). Finally, they wait for the next message by repeating with tail recursion.
 
-If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete; they need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
+If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}\cite{}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete; they need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
 
-In general, to send a message we use \textt{send}, which packages up an chunk of (serializable) data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessId}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
+In general, to send a message we use \textt{send}, which packages up a chunk of (serializable) data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessId}. 
+Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
 The \textt{send} function corresponds to Erlang's \texttt{!} operator.
 
-\subsection{Serialization} \label{s:serialization}
+\subsection{Serialization} 
+%: \label{s:serialization}
+\label{s:serialization}
 
-\spj{Check for consistent spelling of serialize/serialize}
 \spj{Somewhere we need to talk about Binary, and the relation of encode/decode to get/put.}
 
 When we say that the data to be transmitted must be serializable, we mean that it must implement the \textt{Serializable} type class.  This ensures two properties: that the data is \textt{Binary} and \textt{Typeable} (see Figure~\ref{fig:api}).
@@ -249,7 +268,8 @@ While all of Haskell's primitive data types and most of the common higher-level 
 
 At the far end of the channel, the simplest way of receiving a message is with \textt{expect}, which
 examines the message queue associated with the current process and extracts the first message whose type matches the (inferred) type of \textt{expect}\,---\,a \textt{Ping} message in the example.  
-\textt{expect} deques the message, unpacks the transmitted data and returns it.
+\textt{expect} dequeues the message, unpacks the transmitted data and returns it.
+If there is no message of the right type on the queue, \textt{expect} waits for one to arrive.
 
 %Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
@@ -343,7 +363,9 @@ encode :: Binary a => a -> ByteString
 decode :: Binary a => ByteString -> a
   -- Defined in terms of get
 \end{code}
-\caption{A summary of the API.} \label{fig:api}
+\caption{The interface functions of Cloud Haskell%
+%: \label{fig:api}
+\label{fig:api}}
 \end{figure}
 
 
@@ -389,14 +411,20 @@ Finally, we should mention that in a non-strict language such as Haskell, implic
 In our framework, a captured environment is never transmitted implicitly. We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
 
 \subsection{Fault tolerance}
+%: \label{FaultTolerance}
 \label{FaultTolerance}
-We aimed to follow as closely as possible Erlang's model for fault tolerance. Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
+Fault tolerance in Cloud Haskell borrows many good ideas from Erlang. Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
 
-Our fault tolerance API is based on the idea that a process can monitor another process. If the monitored process terminates, the other process will be notified, and can take appropriate action. We provide relatively only low-level functions that allow for notification of possible faults. Actually recovering from faults is left to the application or a higher-level framework, such as the one briefly discussed in the Future work section.
+The premise of Erlang-style fault tolerance is that, when something goes deeply wrong inside a process, the best course of action is for the process to terminate; attempting to glue the pieces back together with string and sealing wax will not lead to robustness.   Instead, another process should take over.  
+To make this possible, one process can monitor another process; if the monitored process terminates, the monitoring process will be notified. 
+Ascertaining the origin of the failure and recovering from it are left to the application or a higher-level framework, such as the Task framework briefly discussed in Section~\ref{s:futureWork}.
 
-A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving that process. A fault that will result in a notification can be caused either by the other process being terminated as a result of an uncaught exception, or if the node on which the process is running becomes inaccessible. The monitoring process can also indicate to be notified in one of two ways: either by an asynchronous exception, which can be caught with Haskell's usual exception handling mechanisms; or by message, which can be received using the \textt{receiveWait} function.
+A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving the terminating process.
+Examples of such faults are uncaught exceptions, and node on which the process is running becoming inaccessible. 
+Notifications can be delivered in two ways: as asynchronous exceptions, which can be caught with Haskell's usual exception handling mechanisms; or by message, which can be received like any other message.
+The choice is made by the monitoring process when monitoring is established.
 
-Here are the functions for setting up process monitoring:
+The functions for setting-up process monitoring are:
 
 \begin{code}
 monitorProcess :: ProcessId -> ProcessId
@@ -404,11 +432,14 @@ monitorProcess :: ProcessId -> ProcessId
 linkProcess    :: ProcessId -> ProcessM ()
 \end{code}
 
-\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process will be notified by exception or by message.
+\noindent
+\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process \texttt{a} will be notified by exception or by message.
 
 \textt{linkProcess} corresponds to Erlang's \textt{link}. It establishes bidirectional process monitoring between the current process and a given process; if either of those processes terminate abnormally, the other will receive an asynchronous exception. \textt{linkProcess} is defined in terms of \textt{monitorProcess}. 
 
-\section{Matching messsages}
+\section{Matching Messages}
+%: \label{s:matching}
+\label{s:matching}
 
 In the previous section, we introduced the \textt{expect} function, which lets us receive messages of a particular type. But what if our process wants to be able to accept messages of different types? Ideally, we'd like to be able to approximate the Erlang \textt{receive} syntax:
 \begin{lstlisting}[numbers=left,language=Erlang,escapeinside={\%}{\^^M}]
@@ -426,7 +457,8 @@ math() ->
 
 This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, expressed as tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, the pattern matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
 
-Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use Haskell's type system. For each distinct message, distinguished in Erlang by the first member of the tuple, we will have a separate type. Thus, we can imagine these types:
+Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. 
+We can imagine three types of messages:
 
 \begin{code}
 data Add = Add ProcessId Double Double
@@ -434,7 +466,9 @@ data Divide = Divide ProcessId Double Double
 data DivByZero = DivByZero
 \end{code}
 
-Clearly, \textt{expect} is not up to the task of translating the above code. \textt{expect} can accept only one of type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
+Clearly, \textt{expect} is not up to the task of translating the above code. 
+\apb{This isn't so clear to me.  Can't I define \texttt{type M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
+\textt{expect} can accept only one of type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
 
 First, let's consider how to specify to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts as a parameter a function that maps a message to an action. \textt{match}'s job is to determine if a message in the queue has the appropriate type, and if so to invoke the user-provided function with the message as its argment.
 
@@ -747,21 +781,25 @@ As is conventional, we capture the environment in an existential\footnote{
 Existential because \textt{MkClosure}'s type is isomorphic 
 to $\forall a. (\exists e. (e \to a) \times e) \to \text{\tt Closure}\;a$.
 }.
-\apb{More explanation needed.  Since there are no existential quantifiers here, this is hard to follow as written.  You have encoded the existential as an (unwritten) universal on the LHS of an arrow; this is not obvious!}
-Different closures of the same type may thereby capture environments
-of different type.  For example,
+\apb{How is this different from\\
+\textt{data Closure a = Closure (Static (e -> a))  e}
+?  If I wrote it that way, the problem would still be with us, would it not?   Have existentials really got anything to do with this?}
+Two different closures that have the same type may nonetheless capture environments
+that have differing types.  For example, consider the list of closures \textt{cs}:
 \begin{code}
   cs :: [Closure Int]
   cs = [MkClosure (static negate) 3,
         MkClosure (static ord)   'x']
 \end{code}
-Both closures in the list \textt{cs} have the same type \textt{Closure Int},
+Both closures in \textt{cs} have the same type, \textt{Closure Int},
 but the first captures an \textt{Int} as its environment, while the second
 captures a \textt{Char}.  (The function \textt{ord} has type \textt{Char->Int}.)
 
 The trouble is that this closure type is not serializable: precisely
 because the environment is existentially quantified, there is no information
-for how to serialize it!  This is apparently esay to solve, by asking
+for how to serialize it!  
+\apb{This explanation doesn't help, particularly because you the objection is a strawman that you dismiss in the next sentence.}
+This is apparently easy to solve, by asking
 that the environment be serializable:
 \begin{code}
 data Closure a where   -- Still wrong
@@ -1319,6 +1357,8 @@ possibly measure utilization as well?
 
 
 \section{Future work}
+%: \label{s:futureWork}
+\label{s:futureWork}
 The framework, as presented in this paper, provides a good starting point for building a distributed application. Our ongoing work in this area is based around a higher-level framework that builds on this one. In it, the main unit of abstraction changes from the process to the {\em task}: an idempotent, restartable block of code which produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
 
 Whereas the process abstraction lets programmers start threads, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. To this end, it uses the current framework as a building block. Data dependencies and tasks are represented as the edges and vertices, respectively, of a directed acyclic graph, and are exposed to the programmer as {\em promises}.
@@ -1343,9 +1383,9 @@ Implementing a framework for distributed computing in Haskell has been done befo
 
 \acks
 Thanks to Alan Mycroft for support and helpful feedback. 
-We particularly thank John Launchbury who helped us see that $(\text{\tt Static}\;\tau)$
-would be a better type for than a static \emph{function} type 
-$\sigma \stackrel{\to}{\#} \tau$.
+We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
+would be an improvement over a static \emph{function} type 
+$\sigma \nfn \tau$.
 
 % The bibliography should be embedded for final submission.
 
