@@ -84,7 +84,8 @@
 \preprintfooter{Haskell for the Cloud}   % 'preprint' option specified.
 
 
-
+\floatpagefraction 0.95
+\textfraction 0.05
 
 
 %%%%% Andrew's commands
@@ -235,9 +236,9 @@ If this example looks familiar, it should: it's very close to the first distribu
 In general, to send a message we use \textt{send}, which packages up an chunk of (serializable) data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessId}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
 The \textt{send} function corresponds to Erlang's \texttt{!} operator.
 
-\subsection{Serialisation} \label{s:serialization}
+\subsection{Serialization} \label{s:serialization}
 
-\spj{Check for consistent spelling of serialise/serialize}
+\spj{Check for consistent spelling of serialize/serialize}
 \spj{Somewhere we need to talk about Binary, and the relation of encode/decode to get/put.}
 
 When we say that the data to be transmitted must be serializable, we mean that it must implement the \textt{Serializable} type class.  This ensures two properties: that the data is \textt{Binary} and \textt{Typeable} (see Figure~\ref{fig:api}).
@@ -260,7 +261,7 @@ examines the message queue associated with the current process and extracts the 
 \spj{This whole section needs a rewrite, and probably dramatically shortenig, in the light the closures section}
 
 %\setlength{\parindent}{-3in}
-\begin{figure}[t!]
+\begin{figure}[T]
 \small
 \textbf{Basic messaging} 
 \begin{code}
@@ -512,7 +513,7 @@ ping2 pingout pongin =
 
 How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
 
-\spj{Somwhere we need to say that send-ports are serialisable and read-ports are not. It's a key property!
+\spj{Somwhere we need to say that send-ports are serializable and read-ports are not. It's a key property!
 Indeed that is why we distinguish the end-points.}
 
 
@@ -547,63 +548,64 @@ one node to another.  For example, consider:
 \texttt{sf} is a function that creates an anonymous function and sends it on Port\texttt{p}.   The function that it sends, \texttt{($\lambda$y -> x+y)},
 is a closure that captures its free variables,
 in this case \textt{x}; 
-in general, to serialise a function value requires that one must also serialise its free variables.  But the types of
+in general, to serialize a function value requires that one must also serialize its free variables.  But the types of
 these free variables are unrelated to the type of the function
-value, so it is entirely unclear \emph{how} to serialise them.
+value, so it is entirely unclear \emph{how} to serialize them.
 \apb{in a library that knows only the type of the function itself}.
 In concrete terms, there is no way to write this instance
 declaration
 \begin{code}
-  instance ???? => Serialisable (a->b) where ????
+  instance ???? => Serializable (a->b) where ????
 \end{code}
 One ``solution'' would be to say that functions are simply not
-serialisable --- but exactly the same issue arises with \textt{spawn}:
+serializable --- but exactly the same issue arises with \textt{spawn}:
 \begin{code}
-  nc :: ProcessM ()
-  nc = do { (s,r) <- newChan
-          ; spawn node (do { ...ans...
-                           ; send s ans })
-          ; ... }
+newComputation = 
+  do { (s,r) <- newChan
+      ; spawn node (do { answer <- longComputation
+                  	   ; sendChan s answer })
+      ; receiveChan r}
 \end{code}
-The \textt{ProcessM} argument of \textt{spawn} is a value closed over
-its free variables, \textt{r} in this case, so exactly the same issue
-arises.  We can hardly solve the problem by outlawing \textt{spawn} -- we
-need \emph{some} way to start a remote computation and that willy-nilly
-involves serialising a closure of some kind.
+The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
+its free variables, \textt{s}.
+Thus, serializing this argument requires serializing a function with a free variable.
+We can't avoid this problem, because the essence of distributed computation is 
+a way of start a remote computation; in a higher-order language like Haskell, that must inevitably
+involve serializing a closure of some kind.
 
 \subsection{The standard solution}
 
-The standard approach to this problem is to bake in serialisation of
+The standard approach to this problem is to bake in serialization of
 function values --- and indeed of all values --- as a primitive operation
 implemented directly by the runtime system.  That is, the runtime system
-allows one to serialise \emph{any value at all}, and transport it to the 
-other end of the wire.  Now function closures can be serialised by
-serialising their free variables, and adding a representation of their code.
+allows one to serialize \emph{any value at all}, and transport it to the 
+other end of the wire.  Now function closures can be serialized by
+serializing their free variables, and adding a representation of their code.
 This approach is used by every higher-order distributed-memory 
 system that we know of, including GDH \cite{GDH}, JoCaml (check!!!), \emph{what else}.
 
 \apb{I don't think that this is true; I think that the standard solution is reflection.
 This does not have the first two disadvantages that you list, but t does have the third.}
-Making serialisability built-in
+Making serializability built-in
 has multiple disadvantages:
 \begin{itemize}
-\item It relies on a single built-in notion of serialisability.
-In contrast, the \texttt{Serialisable} type class introduced in 
-Section~\ref{s:serialisable} gives the programmer control over how
-values are serialised.  For example, a data structure might have
+\item It relies on a single built-in notion of serializability.
+In contrast, the \texttt{Serializable} type class introduced in 
+Section~\ref{s:serializable} gives the programmer control over how
+values are serialized.  For example, a data structure might have
 redundant information cached in the nodes, which should be reconstructed
-at the far end rather than being serialised.  
+at the far end rather than being serialized.  
 This is exactly what type
 classes are for!
-\item It is crucial that some types are \emph{not} serialisable. For
-example, we do not want the receive port of a channels to be serialisable, 
+\item It is crucial that some types are \emph{not} serializable. For
+example, we do not want the receive port of a channels to be serializable, 
 so that senders know where to send their messages to.  Similarly making 
-\textt{TVar}s non-serialisable guarantees that \textt{STM} transactions 
+\textt{TVar}s non-serializable guarantees that \textt{STM} transactions 
 do not span processes.
-\item Serialising a value and sending it over the network has an important
+\item Serializing a value and sending it over the network has an important
 effect on the cost model; it should not be silent.
 \end{itemize}
-In short, built-in serialisability of every value is
+In short, built-in serializability of every value is
 too big a primitive.  We do need \emph{some} built-in support, but
 we seek something more more modest.  Proposing such a mechanism is one of 
 the main contributions of this paper.
@@ -616,22 +618,22 @@ free variables.  For the present we make a simplifying assumption,
 that every node is running the same code.  (We return to the question
 of code that varies between nodes in Section~\ref{s:code-update}.)
 Under this assumption, a closure without free variables can be
-readily be serialised to a single symbolic code address, also called a linker label.
+readily be serialized to a single symbolic code address, also called a linker label.
 
-To distinguish values that can be readily serialised from those that cannot, we introduce a new type constructor
+To distinguish values that can be readily serialized from those that cannot, we introduce a new type constructor
 $(\text{\tt Static}~\tau)$ to classify such values.  The type 
 constructor \textt{Static} is a new built-in primitive, 
-enjoying a built-in serialisation instance:
+enjoying a built-in serialization instance:
 \begin{code}
-  instance Serialisable (Static a)
+  instance Serializable (Static a)
 \end{code}
 It is helpful to remember this intuition: \emph{the defining property of
-a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialised},
-moreover, that it can be serialised without knowledge of how to serialise $\tau$.
-Operationally, the implementation serialises a \textt{Static} value by first evaluating it,
-and then serialising the code label in the result of the evaluation.  
+a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialized},
+moreover, that it can be serialized without knowledge of how to serialize $\tau$.
+Operationally, the implementation serializes a \textt{Static} value by first evaluating it,
+and then serializing the code label in the result of the evaluation.  
 
-\begin{figure}
+\begin{figure}[T!]
 \begin{minipage}{\linewidth}
 $$
 \begin{array}{rcl}
@@ -740,41 +742,41 @@ Both closures in the list \textt{cs} have the same type \textt{Closure Int},
 but the first captures an \textt{Int} as its environment, while the second
 captures a \textt{Char}.  (The function \textt{ord} has type \textt{Char->Int}.)
 
-The trouble is that this closure type is not serialisable: precisely
+The trouble is that this closure type is not serializable: precisely
 because the environment is existentially quantified, there is no information
-for how to serialise it!  This is apparently esay to solve, by asking
-that the environment be serialisable:
+for how to serialize it!  This is apparently esay to solve, by asking
+that the environment be serializable:
 \begin{code}
 data Closure a where   -- Still wrong
-  MkClo :: Serialisable env
+  MkClo :: Serializable env
         => Static (env -> a) -> env -> Closure a
   deriving( Typeable )
 \end{code}
-Now serialisation is easy:
+Now serialization is easy:
 \begin{code}
 instance Binary (Closure a) where
    put (MkClo f env) = put f >> put env
 \end{code}
-But how can we \emph{de}-serialise a closure?  The difficulty is
+But how can we \emph{de}-serialize a closure?  The difficulty is
 that, at the receiving end, we do not know the type captured inside
-the closure, so we do not know what deserialiser to use.  This initially
+the closure, so we do not know what deserializer to use.  This initially
 appears to be a very awkward problem indeed. Maybe we have to send a 
 representation of the environment type, and do a run-time type-class lookup
 at the receiving end?  This solution is used by Clean \cite{clean}.  Maybe
-we could send some representation of the deserialisation function itself?
-But that seems to require a solution to the problem of serialising 
+we could send some representation of the deserialization function itself?
+But that seems to require a solution to the problem of serializing 
 closures, so an infinite regress beckons.
 
 Happily, the solution is simple and, with the benefit of hindsight,
-obvious: perform both serialisation and deserialisation at \emph{closure-construction time},
-not at \emph{closure-serialisation time}:
+obvious: perform both serialization and deserialization at \emph{closure-construction time},
+not at \emph{closure-serialization time}:
 \begin{code}
 data Closure a where   -- Right
-  MkClo :: Serialisable env
+  MkClo :: Serializable env
         => Static (ByteString -> a) 
         -> ByteString -> Closure a
 \end{code}
-Now the correct deserialiser becomes part of the static code pointer 
+Now the correct deserializer becomes part of the static code pointer 
 in the closure.  Simple.
 
 It is easy to un-closure-convert:
@@ -782,9 +784,9 @@ It is easy to un-closure-convert:
   unClo :: Closure a -> a
   unClo (MkClo f x) = unstatic f x
 \end{code}
-This is when the deserialisation of the environment takes place. For a
+This is when the deserialization of the environment takes place. For a
 function-valued closure it makes sense to apply \textt{unClo} once, and
-apply the resulting function many times, so that the deserialisation is
+apply the resulting function many times, so that the deserialization is
 one just once.
 
 \subsection{Closures in practice} \label{s:closures-in-practice}
@@ -802,8 +804,8 @@ expressed using closures:
   sfun = \bs -> let x = decode bs 
              in \y -> x + y + 1)
 \end{code}
-The closure contains the pre-serialised environment \textt{encode x},
-and the static function \textt{sfun}. The latter deserialises its
+The closure contains the pre-serialized environment \textt{encode x},
+and the static function \textt{sfun}. The latter deserializes its
 argument \textt{bs} to get the real argument \textt{x} that it expects.
 
 As a second example, consider \textt{nc} from the beginning of this section.
@@ -826,12 +828,12 @@ a closure as its second argument.
 
 In this section we introduced a rather simple set of language primitives:
 \begin{itemize}
-\item A new type constructor \textt{Static}, with built-in serialisation.
+\item A new type constructor \textt{Static}, with built-in serialization.
 \item A new term form $(\text{\tt static}~e)$.
 \item A new primitive function \textt{unstatic :: Static a -> a}.
 \end{itemize}
 Building on these primitives we can manually construct closures and
-control exactly how and when they are serialised.
+control exactly how and when they are serialized.
 Performing manual closure conversion is tiresome for the programmer,
 and one might wonder about adding some syntactic sugar.
 We have not yet explored this option very much, preferring to work out the
@@ -911,7 +913,7 @@ label of the function to call at the other end
   newtype Static a = MkS String
 \end{code}
 We maintain a table in the \textt{ProcessM} monad, that maps these strings
-to the appropriate implementation composed with the environment deserialiser,
+to the appropriate implementation composed with the environment deserializer,
 \texttt{add1\_\_dec} in our example.
 This table is initialised by the call to \textt{runRemote} which initialises the
 \textt{ProcessM} monad, and the table may be consulted from within the monad:
