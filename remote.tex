@@ -75,6 +75,7 @@
                {|}{{$\mid$}}1               
     }
 
+
 \conferenceinfo{ICFP 2011}{date, City.} 
 \copyrightyear{2011} 
 \copyrightdata{[to be supplied]} 
@@ -82,11 +83,10 @@
 \titlebanner{Haskell for the cloud}        % These are ignored unless
 \preprintfooter{Haskell for the cloud}   % 'preprint' option specified.
 
-
 %\renewcommand{\textfraction}{0.05}
-%\renewcommand{\topfraction}{0.95}
-%\renewcommand{\bottomfraction}{0.95}
-%\renewcommand{\floatpagefraction}{0.35}
+%\renewcommand{\topfraction}{0.9}
+%\renewcommand{\bottomfraction}{0.8}
+%\renewcommand{\floatpagefraction}{0.7}
 %\setcounter{totalnumber}{5}
 
 
@@ -282,6 +282,7 @@ If there is no message of the right type on the queue, \textt{expect} waits for 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
 \small
+\renewcommand{\baselinestretch}{0}
 \textbf{Basic messaging} 
 \begin{code}
 send   :: Serializable a => ProcessId -> a
@@ -318,7 +319,8 @@ matchUnknown :: ProcessM q -> MatchM q ()
 \begin{code}
 spawn :: NodeId -> Closure (ProcessM ()) 
       -> ProcessM ProcessId
-% call :: (Serializable a) => NodeId -> Closure (ProcessM a) -> ProcessM a
+call :: (Serializable a) => NodeId -> 
+        Closure (ProcessM a) -> ProcessM a
 terminate :: ProcessM a
 getSelfPid :: ProcessM ProcessId
 getSelfNode :: ProcessM NodeId
@@ -344,7 +346,7 @@ findPeerByRole :: PeerInfo -> String -> [NodeId]
 
  \textbf{Syntactic sugar}
 \begin{code}
-mkClosure     :: Name   -> Q Exp
+mkClosure :: Name   -> Q Exp
 remotable :: [Name] -> Q [Dec]
 \end{code}
 
@@ -353,7 +355,7 @@ remotable :: [Name] -> Q [Dec]
 say :: String -> ProcessM ()
 \end{code}
 
- \textbf{Type classes}
+ \textbf{Type class}
 \begin{code}
 class (Binary a,Typeable a) => Serializable a
 class Typeable a where typeOf :: a -> TypeRep
@@ -363,7 +365,7 @@ encode :: Binary a => a -> ByteString
 decode :: Binary a => ByteString -> a
   -- Defined in terms of get
 \end{code}
-\caption{The interface functions of Cloud Haskell%
+\caption{The interface functions of Cloud Haskell.%
 %: \label{fig:api}
 \label{fig:api}}
 \end{figure}
