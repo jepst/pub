@@ -188,9 +188,16 @@ In most respects, our framework follows Erlang by favoring message-passing as th
 
 \subsection{Messages to processes}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}:
 
-Consider a simple process that accepts ``pong'' messages and responds by sending a corresponding ``ping'' to whatever process sent the pong. Using our framework, the code for such a process would look like this:
+\begin{code}
+send :: (Serializable a) => ProcessId -> a -> ProcessM ()
+expect :: (Serializable a) => ProcessM a
+\end{code}
+(These type signatures, and those of all of the functions mentioned in this paper, are collected in Figure~\ref{fig:api}.)
+
+Before we discuss these primitives in detail, let's look at an example of their use.
+\textt{ping} is a process that accepts ``pong'' messages and responds by sending a ``ping'' to whatever process sent the pong. Using \textt{send} and \textt{expect}, the code for such a process would look like this:
 
 \begin{code}[caption={Ping in Haskell}]
 data Ping = Ping ProcessId
@@ -200,9 +207,8 @@ data Pong = Pong ProcessId
 ping :: ProcessM ()
 ping = 
    do { self <- getSelfPid
-        receiveWait [
-          match (\ (Pong partner) -> 
-            send partner (Ping self)) ]
+      ; (Pong partner) <- expect
+      ; send partner (Ping self)
       ; ping }
 \end{code}
 
@@ -217,32 +223,25 @@ ping() ->
   ping().               
 \end{code}
 
-These two programs have nearly identical structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell program matches incoming messages by type, whereas in Erlang, messages are usually pattern-matched against tuples. The programs look for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload a process ID, to which the response message is sent, this time containing the process ID of the \textt{ping} process (given in both languages as \textt{self}). Finally, they wait for the next message by repeating with tail recursion.
+These two programs have similar structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell \textt{expect} function matches incoming messages by type, whereas in Erlang, messages usually pattern-matched against tuples whose first element is a well-known atom. The programs wait for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload the process ID of a ``partner'', to whom the response message is sent; this message contains the process ID of the \textt{ping} process (\textt{self}). Finally, they wait for the next message by repeating with tail recursion.
 
-If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete, as the instance declarations have been omitted for brevity.
+If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete; they need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
 
-Here we present some of the important functions that form the messaging API of our framework.
+In general, to send a message we use \textt{send}, which packages up an chunk of (serializable) data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessId}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
+The \textt{send} function corresponds to Erlang's \texttt{!} operator.
 
-\begin{itemize}
-\item 
-\begin{code}
-send :: (Serializable a) => ProcessId -> a -> ProcessM ()
-\end{code}
+When we say that the data to be transmitted must be serializable, we mean that it must implement the \textt{Serializable} type class.  This ensures two properties: that the data is \textt{Binary} and \textt{Typeable} (see Figure~\ref{fig:api}).
+\textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data in binary form; \textt{Typeable} means a function \textt{typeOf} can be used to produce a representation of the data's type.  
 
-To send a message, use \textt{send}, which packages up an arbitrary chunk of data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessID}. Upon receipt, the incoming message will be placed in a message queue associated with the destination process. The data to be transmitted must implement the \textt{Serializable} type class, as well as Haskell's \textt{Data.Binary.Binary} class, which allows the data to be converted to a form suitable for transmission. The \textt{send} function corresponds to Erlang's \texttt{!} operator.
+While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}.
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example of this is \textt{MVar}, Haskell's type for mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a process that has no shared memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model than \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use it in that way. Nevertheless, \textt{MVar}s can be used within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create local threads that can share memory using \textt{MVar}.
+At the far end of the channel, the simplest way of receiving a message is with \textt{expect}, which
+examines the message queue associated with the current process and extracts the first message whose type matches the (inferred) type of \textt{expect}\,---\,a \textt{Ping} message in the example.  
+\textt{expect} deques the message, unpacks the transmitted data and returns it.
 
-\item 
-\begin{code}
-receiveWait :: [MatchM q ()] -> ProcessM q
-match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
-\end{code}
+%Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
-On the receiving end, \textt{receiveWait} and \textt{match}, which operate as a pair, examine the message queue associated with the current process and extract a received message, unpacking the transmitted chunk of data and executing an associated block of user code. Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
-
-In the ping example above, we use \textt{receiveWait} and \textt{match} to accept messages only of type \textt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \textt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \textt{match} will accept messages only of type \textt{Pong}.
-\end{itemize}
+%In the ping example above, we use \textt{receiveWait} and \textt{match} to accept messages only of type \textt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \textt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \textt{match} will accept messages only of type \textt{Pong}.
 
 \subsection{Messages through channels}
 In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \textt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
