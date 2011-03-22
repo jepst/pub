@@ -325,7 +325,7 @@ findPeerByRole :: PeerInfo -> String -> [NodeId]
 
  \textbf{Syntactic sugar}
 \begin{code}
-mkClo     :: Name   -> Q Exp
+mkClosure     :: Name   -> Q Exp
 remotable :: [Name] -> Q [Dec]
 \end{code}
 
@@ -724,10 +724,10 @@ is just a pair of a code pointer and an environment.  With the aid of
 \textt{Static} values we can now represent a closure directly in Haskell:
 \begin{code}
 data Closure a where   -- Wrong
-  MkClo :: Static (e -> a) -> e -> Closure a
+  MkClosure :: Static (e -> a) -> e -> Closure a
 \end{code}
 As is conventional, we capture the environment in an existential\footnote{
-Existential because \textt{MkClo}'s type is isomorphic 
+Existential because \textt{MkClosure}'s type is isomorphic 
 to $\forall a. (\exists e. (e \to a) \times e) \to \text{\tt Closure}\;a$.
 }.
 \apb{More explanation needed.  Since there are no existential quantifiers here, this is hard to follow as written.  You have encoded the existential as an (unwritten) universal on the LHS of an arrow; this is not obvious!}
@@ -735,8 +735,8 @@ Different closures of the same type may thereby capture environments
 of different type.  For example,
 \begin{code}
   cs :: [Closure Int]
-  cs = [MkClo (static negate) 3,
-        MkClo (static ord)   'x']
+  cs = [MkClosure (static negate) 3,
+        MkClosure (static ord)   'x']
 \end{code}
 Both closures in the list \textt{cs} have the same type \textt{Closure Int},
 but the first captures an \textt{Int} as its environment, while the second
@@ -748,14 +748,14 @@ for how to serialize it!  This is apparently esay to solve, by asking
 that the environment be serializable:
 \begin{code}
 data Closure a where   -- Still wrong
-  MkClo :: Serializable env
+  MkClosure :: Serializable env
         => Static (env -> a) -> env -> Closure a
   deriving( Typeable )
 \end{code}
 Now serialization is easy:
 \begin{code}
 instance Binary (Closure a) where
-   put (MkClo f env) = put f >> put env
+   put (MkClosure f env) = put f >> put env
 \end{code}
 But how can we \emph{de}-serialize a closure?  The difficulty is
 that, at the receiving end, we do not know the type captured inside
@@ -772,7 +772,7 @@ obvious: perform both serialization and deserialization at \emph{closure-constru
 not at \emph{closure-serialization time}:
 \begin{code}
 data Closure a where   -- Right
-  MkClo :: Serializable env
+  MkClosure :: Serializable env
         => Static (ByteString -> a) 
         -> ByteString -> Closure a
 \end{code}
@@ -782,7 +782,7 @@ in the closure.  Simple.
 It is easy to un-closure-convert:
 \begin{code}
   unClo :: Closure a -> a
-  unClo (MkClo f x) = unstatic f x
+  unClo (MkClosure f x) = unstatic f x
 \end{code}
 This is when the deserialization of the environment takes place. For a
 function-valued closure it makes sense to apply \textt{unClo} once, and
@@ -798,7 +798,7 @@ expressed using closures:
      -> Int -> ProcessM ()
   sf ch x = send ch clo
     where
-      clo  = MkClo (static sfun) (encode x)
+      clo  = MkClosure (static sfun) (encode x)
 
   sfun :: ByteString -> Int -> Int
   sfun = \bs -> let x = decode bs 
@@ -813,7 +813,7 @@ Using closures we would rewrite it like this:
 \begin{code}
   nc :: ProcessM ()
   nc = do { (s,r) <- newChan
-          ; spawn node (MkClo (static child) (encode s))
+          ; spawn node (MkClosure (static child) (encode s))
           ; ... }
 
   child :: ByteString -> ProcessM ()
@@ -864,7 +864,7 @@ As a running example, here is the code for \textt{sfun} using the workarounds:
 \begin{code}
   sf :: SendPort (Closure (Int -> Int)) 
      -> Int -> ProcessM ()
-  sf ch x = send ch ($(mkClo 'add1) x)
+  sf ch x = send ch ($(mkClosure 'add1) x)
 
   add1 :: Int -> Int -> Int
   add1 x y = x + y + 1
@@ -876,11 +876,11 @@ a top-level function (\textt{add1} in this case) whose first argument is
 the environment.  However, the code is otherwise significantly more 
 straightforward than in Section~\ref{s:closures-in-practice}.
 
-The Template Haskell splice \textt{$(mkClo 'add1)}
+The Template Haskell splice \textt{$(mkClosure 'add1)}
 is run at compile time.  Its argument \textt{'add1} is Template Haskell notation
 for the (quoted) name of the \textt{add1} function.
 \begin{code}
-  mkClo :: Name -> Q Exp
+  mkClosure :: Name -> Q Exp
 \end{code}
 The splice expands to a call to \textt{add1__closure}, 
 so the net result is just as if we had written
@@ -895,7 +895,7 @@ added by the Template Haskell splice \textt{$(remotable ['add1])}.
 This splice expands to the following definitions
 \begin{code}
   add1__closure :: Int -> Closure Int
-  add1__closure x = MkClo (MkS "M.add1") (encode x)
+  add1__closure x = MkClosure (MkS "M.add1") (encode x)
 
   add1__dec :: ByteString -> Int -> Int
   add1__dec bs = add1 (decode bs)
@@ -933,7 +933,7 @@ process crashes, consistent with Erlang's philosophy of crash-and-recover.
 Tiresomely, the programmer has the following obligations:
 \begin{itemize}
 \item In each module, write one call \textt{$(remotable [...])},
-passing a list of all the functions passed to \textt{mkClo}.
+passing a list of all the functions passed to \textt{mkClosure}.
 \item In the call to \texttt{runRemote}, pass a list
 a list of all the \textt{\_\_remoteTable} definitions, imported from
 each module that has a call to \textt{remotable}.
@@ -943,7 +943,7 @@ Finally, the closure un-wrapping process becomes monadic, which is
 a little less convenient for the programmer:
 \begin{code}
   unClosure :: Typeable a => Closure a -> ProcessM a
-  unClosure (MkClo (MkS s) env)
+  unClosure (MkClosure (MkS s) env)
     = do { f <- lookupStatic s
          ; return (f env) }
 \end{code}
@@ -1247,7 +1247,7 @@ query counterpid =
 go "MASTER" =
   do { aNode <- liftM (head . flip 
          findPeerByRole "WORKER") getPeers
-     ; cpid <- spawn aNode ($(mkClo 'counterLoop) 0)
+     ; cpid <- spawn aNode ($(mkClosure 'counterLoop) 0)
      ; increment cpid
      ; increment cpid
      ; newVal <- query cpid
