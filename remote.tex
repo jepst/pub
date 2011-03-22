@@ -27,8 +27,29 @@
 % authoryear    To obtain author/year citation style instead of numeric.
 
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{listings}
+\usepackage[pdftex]{graphicx}
 \usepackage{verbatim} % only for comment environment
+\usepackage{ifthen}
+
+\graphicspath{{figures/}}
+\DeclareGraphicsExtensions{.pdf, .png, .ps}   % NOT .jpg  because it throws away the detail.
+
+\newboolean{showcomments}
+\setboolean{showcomments}{true}
+\ifthenelse{\boolean{showcomments}}
+  {\newcommand{\nb}[2]{
+    \fbox{\bfseries\sffamily\scriptsize#1}
+    {\sf\small$\blacktriangleright$\textit{#2}$\blacktriangleleft$}
+    % \marginpar{\fbox{\bfseries\sffamily#1}}
+   }
+  }
+  {\newcommand{\nb}[2]{}
+  }
+\newcommand\apb[1]{\nb{apb}{#1}}
+\newcommand\spj[1]{\nb{spj}{#1}}
+\newcommand\je[1]{\nb{jeff}{#1}}
 
 \begin{document}
 
@@ -154,11 +175,20 @@ The contributions of this paper are:
 \subsection{Processes}
 The basic unit of concurrency in our framework is the {\em process}. A process is a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not prohibit shared-memory concurrency. The existing elements of Haskell's concurrency model, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. The framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
+\begin{figure}
+\centerline {
+\includegraphics[width=\columnwidth]{threadsAndProcesses}
+}
+\caption{ \label{fig:ProcessBubbles}
+Processes A and B do not share memory, even though they are running on the same physical processor; instead they communicate over channels, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \texttt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \texttt{ProcessM} monad; threads, in contrast, execute in the \texttt{IO} monad.
+}
+\end{figure}
+
+In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it does not prohibit shared-memory concurrency. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure \ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared memory concurrency cannot be inadvertently used between remote systems. 
 
 \subsection{Messages to processes}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered. This functionality is implemented in the \textt{ProcessM} monad, such that all the state associated with messaging (most especially, the message queue) is wrapped in that data structure, which is updated with each statement. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
 
 Consider a simple process that accepts ``pong'' messages and responds by sending a corresponding ``ping'' to whatever process sent the pong. Using our framework, the code for such a process would look like this:
 
@@ -168,12 +198,12 @@ data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
 
 ping :: ProcessM ()
-ping self = 
+ping = 
    do { self <- getSelfPid
         receiveWait [
           match (\ (Pong partner) -> 
             send partner (Ping self)) ]
-      ; ping self }
+      ; ping }
 \end{code}
 
 The equivalent code in Erlang looks like this:
@@ -309,6 +339,7 @@ class Binary t where put :: t -> Put; get :: Get t
 \end{code}
 \caption{A summary of the API} \label{fig:api}
 \end{figure}
+
 
 To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
 
@@ -472,13 +503,15 @@ grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
   sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf ch x = send ch (\y -> x+y)
+  sf p x = send p (\y -> x+y)
 \end{code}
-A function value is a closure that captures its free variables,
-\textt{x} in the example, so to serialise a function value
-one must serialise its free variables.  But the types of
+\texttt{sf} is a function that creates an anonymous function and sends it on Port\texttt{p}.   The function that it sends, \texttt{($\lambda$y -> x+y)},
+is a closure that captures its free variables,
+in this case \textt{x}; 
+in general, to serialise a function value requires that one must also serialise its free variables.  But the types of
 these free variables are unrelated to the type of the function
 value, so it is entirely unclear \emph{how} to serialise them.
+\apb{in a library that knows only the type of the function itself}.
 In concrete terms, there is no way to write this instance
 declaration
 \begin{code}
@@ -508,6 +541,9 @@ other end of the wire.  Now function closures can be serialised by
 serialising their free variables, and adding a representation of their code.
 This approach is used by every higher-order distributed-memory 
 system that we know of, including GDH \cite{GDH}, JoCaml (check!!!), \emph{what else}.
+
+\apb{I don't think that this is true; I think that the standard solution is reflection.
+This does not have the first two disadvantages that you list, but t does have the third.}
 
 But making serialisability built-in
 has multiple disadvantages:
@@ -542,8 +578,10 @@ that every node is running the same code.  (We return to the question
 of code that varies between nodes in Section~\ref{s:further-work}.)
 Under this assumption, a closure without free variables can be
 readily be serialised to a single label, or even (in the limit) a machine
-address.  Types classify values, so it is natural to suggest 
-a type $(\text{\tt Static}~\tau)$ to classify such values.  The type 
+address.  
+
+To distinguish values that can be readily serialised from those that cannot, we introduce a new type constructor
+$(\text{\tt Static}~\tau)$ to classify such values.  The type 
 constructor \textt{Static} is a new built-in primitive, 
 enjoying a built-in serialisation instance:
 \begin{code}
@@ -551,9 +589,9 @@ enjoying a built-in serialisation instance:
 \end{code}
 It is helpful to remember this intuition: \emph{the defining property of
 a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialised},
-can moreover can be serialised without knowledge of how to serialise $\tau$.
+moreover, that it can be serialised without knowledge of how to serialise $\tau$.
 Operationally, the implementation serialises a \textt{Static} value by first evaluating it,
-and then serialising the code label in the value thus obtained.  
+and then serialising the code label in the result of the evaluation.  
 
 \begin{figure}
 \begin{minipage}{\linewidth}
@@ -584,24 +622,24 @@ $$
 Along with the new type constructor we introduce a new term,
 $(\text{\tt static}\;e)$ to introduce it, and another 
 $(\text{\tt unstatic}\;e)$ to elimiate it.
-The simple typing judgements for these terms are given in Figure~\ref{fig:static}.
+The typing judgements for these terms are given in Figure~\ref{fig:static}.
 They embody the following key ideas:
 \begin{itemize}
 \item A \emph{variable is static} iff it is bound at the top level.
 \item A \emph{term $(\text{\tt static}\;e)$ has type $(\text{\tt Static}\;\tau)$} iff 
-(a) $e$ has type $\tau$, and (b) $e$ is static.  
+$e$ has type $\tau$, and $e$ is static.  
 \end{itemize}
 The type environment $\Gamma$ is a set of variable bindings, each of form $x :_{\delta} \sigma$.
 The subscript $\delta$ is a static-ness flag, which takes the values \textt{S} (static) or
 \textt{D} (dynamic).  The idea is that top-level (static) variables have bindings
-of form $f :_{\text{\tt S}}$, while all other variables have dynamic bindings $x :_{\text{\tt D}}$.
+of the form $f :_{\text{\tt S}}$, while all other variables have dynamic bindings $x :_{\text{\tt D}}$.
 (It is straightforward to formalise this idea in the typing judgements for top-level
 bindings and for terms; we omit the details.)
 The operation $\Gamma \downarrow$ filters $\Gamma$ to leave only the static bindings,
-thereby checking that a term $\text{\tt static}\;e$ is only well typed if its free
-variables are all static.
+thereby checking that a term $\text{\tt static}\;e$ is well typed only if all its free
+variables are static.
 
-Although simple, these rules have intersting consequences:
+Although simple, these rules have interesting consequences:
 \begin{itemize}
 \item A static variable may have a non-\textt{Static} type. Consider the 
 top-level binding for the identity function:
@@ -612,18 +650,19 @@ top-level binding for the identity function:
 The function \textt{id} is by definition static (top-level).  Its binding
 in $\Gamma$ will have $\delta=\text{\tt S}$, but its type is the ordinary
 polymoprhic type.
+\apb{However, (Static id) has static type, right?}
 
 \item A non-static variable may have a \textt{Static} type.  For example
 \begin{code}
   f :: Static a -> (Static a, Int)
   f x = (x, 3)
 \end{code}
-Here \texttt{x} is clearly not a static variable, but it certainly has
+Here \texttt{x} is lambda-bound and so is not a static variable, but it certainly has
 a \textt{Static} type.  So fully-dynamic functions
 can readily compute over values of \textt{Static} type.
 
 \item The free variables of a term $(\text{\tt static}\;e)$ need not have
-type $(\text{\tt Static}\;\tau)$. For example, this term is well-typed:
+\text{\tt Static} types. For example, this term is well-typed:
 \begin{code}
   static (length . filter id) :: Static ([Bool] -> Int)
 \end{code}
@@ -635,9 +674,9 @@ static. However, all these functions have their usual types.
 \subsection{From static values to closures}
 
 In the examples \textt{sf} and
-\textt{nc} (at the start of this Section) we wanted to transmit closure
+\textt{nc} (at the start of this Section) we wanted to transmit closures
 that certainly did have free variables.  How do static values help us?
-Answer: they help us by making closure conversion possible. A closure
+They help us by making closure conversion possible. A closure
 is just a pair of a code pointer and an environment.  With the aid of
 \textt{Static} values we can now represent a closure directly in Haskell:
 \begin{code}
@@ -646,6 +685,7 @@ data Closure a where   -- Wrong
         -> env -> Closure a
 \end{code}
 As is conventional, we capture the environment in an existential.
+\apb{More explanation needed.  Since there are no existential quantifiers here, this is hard to follow as written.  You have encoded the existential as an (unwritten) universal on the LHS of an arrow; this is not obvious!}
 The trouble is that this closure type is not serialisable: precisely
 because the environment is existentially quantified, there is no information
 for how to serialise it!  This is apparently esay to solve, by asking
