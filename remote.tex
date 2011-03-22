@@ -371,7 +371,79 @@ linkProcess :: ProcessId -> ProcessM ()
 \textt{linkProcess} corresponds to Erlang's \textt{link}. It establishes bidirectional process monitoring between the current process and a given process; if either of those processes terminate abnormally, the other will receive an asynchronous exception. \textt{linkProcess} is defined in terms of \textt{monitorProcess}. 
 
 
+\section{More on receiving messages}
 
+In the previous section, we introduced the \textt{expect} function, which lets us receive messages of a particular type. But what if our process wants to be able to accept messages of different types? Ideally, we'd like to be able to approximate the Erlang \textt{receive} syntax:
+
+\begin{code}[language=Erlang]
+math() ->
+  receive
+    {add, Pid, Num1, Num2} -> 
+      Pid ! Num1 + Num2;
+    {divide, Pid, Num1, Num2} when Num2 /= 0 -> 
+      Pid ! Num1 / Num2;
+    {divide, Pid, _, _} ->
+      Pid ! div_by_zero
+  end,
+  math().
+\end{code}
+
+This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, expressed as tuples. Each pattern has a corresponding message handling action. In the first clause, it will respond to a tuple containing the atom \textt{add}, a process ID, and two numbers by sending the sum of the two numbers to the process. In the second clause, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous pattern, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
+
+Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use Haskell's type system. Thus, we can imagine these types of messages:
+
+\begin{code}
+data Add = Add ProcessId Double Double
+data Divide = Divide ProcessId Double Double
+data DivByZero = DivByZero
+\end{code}
+
+Clearly, \textt{expect} is not up to the task of the above code. \textt{expect} can accept only one of type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
+
+First, let's consider how to specify one type of message to accept and a corresponding action. We introduce \textt{match}, we accepts as a parameter a function which maps a message of a \textt{Serializable} type to an action. When testing an incoming message about a call to \textt{match}, we are comparing the type of the incoming message against the type \textt{a}. Any message of that type will be considered matched, will be removed from the message queue, and the message handler will be invoked.
+
+\begin{code}
+match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
+\end{code}
+
+The \textt{MatchM} returned by \textt{match} contains the conditions of the match and is consumed by \textt{receiveWait}, which mimics Erlang's \textt{receive} syntax by evaluating several \textt{MatchM}'s in order. The value returned by the selected message action is also the return value of \textt{receiveWait}.
+
+\begin{code}
+receiveWait :: [MatchM q ()] -> ProcessM q
+\end{code}
+
+And how can we handle Erlang's \textt{where} clause that allows message acceptance to be qualified by a predicate? We offer \textt{matchIf}, whose first parameter is allowed to examine the incoming message without removing it from the queue.
+
+\begin{code}
+matchIf :: Serializable a => (a -> Bool) -> (a -> ProcessM q) -> MatchM q ()
+\end{code}
+
+Below we implement the \textt{math} function in Haskell. Notice that the patterns from the Erlang version have been replaced with parameters to lambda functions.
+
+\begin{code}
+-- omitted: Serializable instances for Add, Divide, and DivByZero types
+math :: ProcessM ()
+math =
+  receiveWait
+    [ match   (\(Add pid num1 num2) -> 
+                send pid (num1 + num2)),
+      matchIf (\(Divide _ _ num2) -> num2 /= 0) 
+              (\(Divide pid num1 num2) -> 
+                send pid (num1 / num2)),
+      match   (\(Divide pid _ _) -> 
+                send pid DivByZero) ]
+        >> math
+\end{code}
+%\)
+
+Matching by message type is not quite the same as matching by message value. For example, if a particular \textt{match} accepts message of a type, then all variants of that type must be handled. In the above example, this is okay, because the \textt{Add} type has only the \textt{Add} constructor. If there were another constructor, then the \textt{match} call that expects only the \textt{Add} constructor would cause a pattern match exception if a message with the other constructor were received.
+
+Clearly, \textt{receiveWait} is more flexible than \textt{expect}. In fact, \textt{expect} is implemented in terms of \textt{receiveWait}. It looks like this:
+
+\begin{code}
+expect :: (Serializable a) => ProcessM a
+expect = receiveWait [match return]
+\end{code}
 
 
 \section{Closures}
