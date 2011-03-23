@@ -32,6 +32,8 @@
 \usepackage[pdftex]{graphicx}
 \usepackage{verbatim} % only for comment environment
 \usepackage{ifthen}
+\usepackage{url}
+\urlstyle{sf}
 
 \graphicspath{{figures/}}
 \DeclareGraphicsExtensions{.pdf, .png, .ps}   % NOT .jpg  because it throws away the detail.
@@ -152,7 +154,7 @@ A \emph{cloud} is data center that makes available a large number of processors 
 
 How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using conventional shared-memory concurrency primitives, such as locks and transactions. 
 %We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
-%\spj{Not a strong argument.  Message passing is always availble for shared memory machines and people don't use it much.  It's just
+%\spj{Not a strong argument.  Message passing is always available for shared memory machines and people don't use it much.  It's just
 %too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
 %For example, 
 %$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
@@ -160,11 +162,11 @@ Although possible, we don't believe this to be the best way forward.
 To be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
 Synchronization is another major cost; while shared memory makes some synchronization explicit (locks, compare and swap), the synchronization implicit in the simulation of the memory itself, and in higher-level abstractions such as transactions, remains implicit.
 
-Instead, we turn to a solution popularized by MPI \cite{mpi99} and Erlang \cite{Erlang93}: {\em message passing}. The message-passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another is explicitly sent in {\em messages}.  This make the costs of communication apparent.
+Instead, we turn to a solution popularized by \mbox{Erlang}\,\cite{Erlang93} and MPI\,\cite{mpi99}: {\em message passing}. The message-passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another are explicitly sent in {\em messages}.  This make the costs of communication apparent.
 It also means that a concurrent process is natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
 %Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into memory.
 
-Failure is a very real issue in the cloud; indeed, in many ways failure is the defining issue of distributed computation.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the whole computation from the beginning, the likelihood of it ever completing would get smaller and smaller as the system scaled up.  
+Failure is a very real issue in the cloud; indeed, in many ways failure is the defining issue of distributed computation.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the whole computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
 A programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang has a solution that has stood the test of time; 
 %the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We 
 we don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
@@ -209,7 +211,7 @@ We discuss this point further in Section~\ref{s:serialization}.
 \subsection{Messages to processes}
 
 Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
-There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}}:
+There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}.}:
 
 \par{\small
 \begin{code}
@@ -247,29 +249,26 @@ ping() -> receive
 
 These two programs have similar structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell \textt{expect} function matches incoming messages by type, whereas in Erlang, messages usually pattern-matched against tuples whose first element is a well-known atom. The programs wait for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload the process ID of a ``partner'', to whom the response message is sent; this message contains the process ID of the \textt{ping} process (\textt{self}). Finally, they wait for the next message by repeating with tail recursion.
 
-If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}\cite{}. Note that in the Haskell version, unlike in the Erlang version, \textt{Ping} and \textt{Pong} are types rather than atoms, and so they need to be declared explicitly. As given, the type declarations are incomplete; they need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
+If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}\cite{GSWE}. Note that in the Erlang version, \textt{Ping} and \textt{Pong} are atoms, whereas in the Haskell version they are types, and so need to be declared explicitly. 
+As given, the type declarations are incomplete; \textt{Ping} and \textt{Pong} need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
 
-In general, to send a message we use \textt{send}, which packages up a chunk of (serializable) data and transmits it (possibly over the network) to a particular process, given by its unique \textt{ProcessId}. 
+The \textt{send} function is our general-purpose message sending primitive; it packages up a chunk of (serializable) data of arbitrary type and transmits it (possibly over the network) to a particular process, selected by its \textt{ProcessId} argument.
 Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
-The \textt{send} function corresponds to Erlang's \texttt{!} operator.
-
-\subsection{Serialization} 
-%: \label{s:serialization}
-\label{s:serialization}
-
-\spj{Somewhere we need to talk about Binary, and the relation of encode/decode to get/put.}
-
-When we say that the data to be transmitted must be serializable, we mean that it must implement the \textt{Serializable} type class.  This ensures two properties: that the data is \textt{Binary} and \textt{Typeable} (see Figure~\ref{fig:api}).
-\textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data in binary form; \textt{Typeable} means a function \textt{typeOf} can be used to produce a representation of the data's type.  
-
-While all of Haskell's primitive data types and most of the common higher-level data structures are instances of \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment requiring communication between remote systems, we felt it best to prohibit programmers from trying to use \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}.
-
-\spj{What about receive?  Point out that parsing can fail, which makes use block, yes?}
+The \textt{send} function corresponds to the \texttt{!} operator of Erlang.
 
 At the far end of the channel, the simplest way of receiving a message is with \textt{expect}, which
 examines the message queue associated with the current process and extracts the first message whose type matches the (inferred) type of \textt{expect}\,---\,a \textt{Ping} message in the example.  
 \textt{expect} dequeues the message, unpacks the transmitted data and returns it.
 If there is no message of the right type on the queue, \textt{expect} waits for one to arrive.
+
+\subsection{Serialization} 
+%: \label{s:serialization}
+\label{s:serialization}
+
+When we say that the data to be transmitted must be serializable, we mean that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}).
+\textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data  item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a representation of the item's type.  
+
+While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
 
 %Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
@@ -277,7 +276,7 @@ If there is no message of the right type on the queue, \textt{expect} waits for 
 %In the ping example above, we use \textt{receiveWait} and \textt{match} to accept messages only of type \textt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \textt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \textt{match} will accept messages only of type \textt{Pong}.
 
 \subsection{Starting processes}
-\spj{This whole section needs a rewrite, and probably dramatically shortenig, in the light the closures section}
+\spj{This whole section needs a rewrite, and probably dramatically shortening, in the light the closures section}
 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
@@ -369,7 +368,7 @@ decode :: Binary a => ByteString -> a
 \end{figure}
 
 
-To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node has a unique identifier, which contains the address and port number of a computer in the network. So, to be able to start processes, we want a function named \textt{spawn} that takes two parameters: a node identifier, saying on which computer the new process should run; and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The function should then return a process identifier, which can be used with \textt{send}. And since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this (incorrect) possibility:
+To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node is named by a \textt{NodeId}, a unique identifier that contains an IP address that can be used to communicate with the node. So, to be able to start a process, we want a function named \textt{spawn} that takes two parameters: a \textt{NodeId} that specifies where the new process should run, and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The \textt{spawn} function should then return a \textt{ProcessId}, which can be used with \textt{send}.  Since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this possibility:
 
 \begin{code}
 -- wrong
@@ -385,11 +384,11 @@ do { pingProc <- spawn someNode ping
    ; send pingProc (Pong pongProc) }
 \end{code}
 
-The above example is supposed to start two new processes on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial message to the ping process.
+This code is supposed to start two new processes, located on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial \textt{Pong} message to the ping process.
 
-To understand why this version of \textt{spawn} is wrong, consider how to implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \textt{spawn} can be implemented using \textt{send}.  \textt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \textt{spawn}. In the above case, the call to \textt{spawn} would send a message containing the function \textt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \textt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
+To understand why this version of \textt{spawn} is wrong, consider what is required to  implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \textt{spawn} can be implemented using \textt{send}.  \textt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \textt{spawn}. In the above case, the call to \textt{spawn} would send a message containing the function \textt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \textt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
 
-The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value of top-level names, as we know that they already exist at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
+The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
 
 \begin{code}
 -- wrong
@@ -455,7 +454,7 @@ math() ->
   math().
 \end{lstlisting}
 
-This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, expressed as tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, it matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
+This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, which are (by convention) all tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, it matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
 
 Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. 
 We can imagine three types of messages:
@@ -465,12 +464,13 @@ data Add = Add ProcessId Double Double
 data Divide = Divide ProcessId Double Double
 data DivByZero = DivByZero
 \end{code}
+\apb{Maybe ``Additive'' rather than ``Add'', so simplify the discussion of whet happens if a second constructor is present (``Subtract'')?}
 
 Clearly, \textt{expect} is not up to the task of translating the above code. 
-\apb{This isn't so clear to me.  Can't I define \texttt{type M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
+\apb{This isn't so clear to me.  Can't I define \texttt{data M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
 \textt{expect} can accept only one of type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
 
-First, let's consider how to specify to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts as a parameter a function that maps a message to an action. \textt{match}'s job is to determine if a message in the queue has the appropriate type, and if so to invoke the user-provided function with the message as its argment.
+First, let's consider how to specify to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts as a parameter a function that maps a message to an action. \textt{match}'s job is to determine if a message in the queue has the appropriate type, and if so to invoke the user-provided function with the message as its argument.
 
 \begin{code}
 match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
@@ -509,7 +509,8 @@ math =
 %\)
 
 The combination of \textt{receiveWait} and \textt{match} closely corresponds to Erlang's \textt{receive} syntax. The list of \textt{MatchM}s are tested in order against each message in the message queue. When a matching message is found, the corresponding lambda function is invoked. 
-Matching by message type is not quite the same as matching by message value. For example, if a particular \textt{match} accepts message of a type, then all variants of that type must be handled. In the above example, this is okay, because the \textt{Add} type has only the \textt{Add} constructor. If there were another constructor, then the \textt{match} call that expects only the \textt{Add} constructor would cause a pattern match exception if a message with the other constructor were received.
+Matching by message type is not quite the same as matching by message value. For example, if a particular \textt{match} accepts message of a certain type, then all variants of that type must be handled. In the above example, this is okay, because the \textt{Add} type has only the \textt{Add} constructor. 
+If instead it were a sum type with a second constructor, then the \textt{match} call that deals only with the \textt{Add} constructor would cause a pattern match exception if a message with the other constructor were received.
 
 Clearly, \textt{receiveWait} is more flexible than \textt{expect}. In fact, \textt{expect} is implemented in terms of \textt{receiveWait}. Its definition looks like this:
 
@@ -519,9 +520,9 @@ expect = receiveWait [match return]
 \end{code}
 
 \section{Messages through channels}
-In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type signature of \textt{send}, essentially any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e. dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
+In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type of \textt{send}, any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e., dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
 
-Thus, an alternative to sending messages by process identifier is to use {\em typed channels}. Each distributed channel consists of two ends, which we call the {\em send port} and {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are associated with a particular type and the send port will emit messages only of that type; likewise, the receive port will accept messages only of that type, so the sender has a guarantee that its receiver is of the right type.
+To offer this assurance, we provide distributed {\em typed channels} as an alternative to sending messages directly to a process. Each channel consists of two ends, which we call the {\em send port} and the {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are created with a specific type: the send port will accept messages only of that type, and consequently the receive port will proffer messages only of that type.
 
 The central functions of the channel API are:
 \par{\small
@@ -532,9 +533,14 @@ sendChan :: Serializable a => SendPort a -> a -> ProcessM ()
 receiveChan :: Serializable a => ReceivePort a -> ProcessM a
 \end{code}}
 
-A critical point is that although \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, the \textt{ReceivePort} cannot be moved from the node on which it was created. We decided that allowing a movable and copyable message destination would introduce too much complexity. This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
+A critical point is that although a \textt{SendPort} can be serialized and copied to other nodes, allowing the channel to accept data from multiple sources, a \textt{ReceivePort} is not Serializable, and thus cannot be moved from the node on which it was created.
+This restriction is enforced by making \textt{SendPort} an instance of \textt{Serializable}, but not \textt{ReceivePort}. 
+This is a deliberate design decision; as a consequence, receive ports in Cloud Haskell are more like Erlang process identifiers or TCP ports than they are like receive rights in the Accent~\cite{Rashid81} and Mach~\cite[\S4.2.3]{free-s2008} operating system kernels.   
+This decision reflects our intended execution environment, in which we expect channels to be used to communicate across a network.  
+The ability, offered by Mach, to move a receive port from one place to another can be very useful for moving responsibility for a service from one provider to another, but only if this can be done without the risk of losing messages that are in transit.  
+This is easy inside an operating system like Mach, but much less so in a distributed environment, especially when one of the prime reasons for moving a service to a new server is that the old server has crashed.  
 
-We can now reformulate our ping example to use typed channels. The process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \textt{Ping} and \textt{Pong} message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and the \textt{Pong} message contains the send port of a channel of pings.
+We can now reformulate our ping example to use typed channels. The \textt{ping} process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \textt{Ping} and \textt{Pong} message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and the \textt{Pong} message contains the send port of a channel of pings.
 
 % this might not be the best example, really
 \begin{code}
@@ -545,11 +551,10 @@ ping2 pingout pongin =
       ; ping pingout pingin }
 \end{code}
 
-How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
-
-\spj{Somwhere we need to say that send-ports are serializable and read-ports are not. It's a key property!
-Indeed that is why we distinguish the end-points.}
-
+How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. 
+How do we start a new process?
+This requires sending a function to a remote node; in the general case, a function consists not only of code, but also of the bindings of the free variables of that code\,---\,its environment.
+This \pair{code}{environment} pair is called a closure.
 
 \section{Closures}
 \label{Closures}
@@ -577,49 +582,46 @@ grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
   sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf p x = send p (\y -> x+y+1)
+  sf p x = send p (\y -> x + y + 1)
 \end{code}
-\texttt{sf} is a function that creates an anonymous function and sends it on Port\texttt{p}.   The function that it sends, \texttt{($\lambda$y -> x+y)},
+\textt{sf} is a function that creates an anonymous function and sends it on port \textt{p}.   The function that it sends, \lstinline!(\y -> x + y + 1)!,
 is a closure that captures its free variables,
 in this case \textt{x}; 
 in general, to serialize a function value requires that one must also serialize its free variables.  But the types of
 these free variables are unrelated to the type of the function
-value, so it is entirely unclear \emph{how} to serialize them.
-\apb{in a library that knows only the type of the function itself}.
+value, so it is entirely unclear \emph{how} to serialize them
+\apb{using a library that knows only the type of the function itself}.
 In concrete terms, there is no way to write this instance
 declaration
 \begin{code}
   instance ???? => Serializable (a->b) where ????
 \end{code}
+\apb{This doesn't help\,---\,too many question marks!}
 One ``solution'' would be to say that functions are simply not
-serializable --- but exactly the same issue arises with \textt{spawn}:
+serializable\,---\,but exactly the same issue arises with \textt{spawn}:
 \begin{code}
 newComputation = 
   do { (s,r) <- newChan
       ; spawn node (do { answer <- longComputation
                   	   ; sendChan s answer })
-      ; receiveChan r}
+      ; receiveChan r }
 \end{code}
 The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
 its free variables, \textt{s}.
 Thus, serializing this argument requires serializing a function with a free variable.
-We can't avoid this problem, because the essence of distributed computation is 
-a way of start a remote computation; in a higher-order language like Haskell, that must inevitably
+We can't avoid this problem, because the essence of distributed computation is providing a way to start a remote computation; in a higher-order language like Haskell, that must inevitably
 involve serializing a closure of some kind.
 
-\subsection{The standard solution}
+\subsection{Prior Solutions}
 
-The standard approach to this problem is to bake in serialization of
-function values --- and indeed of all values --- as a primitive operation
+One solution to this problem is to ``bake in'' serialization of
+function values\,---\,and indeed of all values\,---\,as a primitive operation
 implemented directly by the runtime system.  That is, the runtime system
-allows one to serialize \emph{any value at all}, and transport it to the 
+allows one to serialize \emph{any value at all}, and transports it to the 
 other end of the wire.  Now function closures can be serialized by
 serializing their free variables, and adding a representation of their code.
-This approach is used by every higher-order distributed-memory 
-system that we know of, including GDH \cite{gdh2001}, JoCaml (check!!!), \emph{what else}.
+This approach is used by GDH \cite{gdh2001} and JoCaml~\cite{joCaml} \spj{check!!!}.
 
-\apb{I don't think that this is true; I think that the standard solution is reflection.
-This does not have the first two disadvantages that you list, but t does have the third.}
 Making serializability built-in
 has multiple disadvantages:
 \begin{itemize}
@@ -637,16 +639,23 @@ so that senders know where to send their messages to.  Similarly making
 \textt{TVar}s non-serializable guarantees that \textt{STM} transactions 
 do not span processes.
 \item Serializing a value and sending it over the network has an important
-effect on the cost model; it should not be silent.
+effect on the cost model; it should not be invisible.
 \end{itemize}
-In short, built-in serializability of every value is
+
+A similar approach is used by Java RMI~\cite{javarmi}; although RMI requires the programmer to determine which objects are serializable (by declaring that they implement the marker interface \textt{Serializable}), the programer is not required to actually write the methods that serialize the fields of the object; that is taken care of by the language implementation itself.
+However, Java RMI uses introspection to provide the programmer with fine control over
+which fields are serialized (the \textt{transient} flag prevents serialization), and exactly how the data are encoded (by providing the private methods \textt{writeObject} and \textt{readObject}); it also allows the programmer to take control of the whole serialization process by implementing the \textt{Externalizable} interface, which means implementing the \textt{writeExternal} and \textt{readExternal} methods by hand. 
+As a consequence, Java avoids the three disadvantages listed above, while still automating serialization for simple data objects.
+
+Without reflection, these options are not open to us.  
+Building-in serializability of every value is
 too big a primitive.  We do need \emph{some} built-in support, but
-we seek something more more modest.  Proposing such a mechanism is one of 
+we seek something more more modest.  Proposing such a mechanism for a language without reflection is one of 
 the main contributions of this paper.
 
 \subsection{Static values}
 
-We begin with a simple intuituion: some closures can readily be
+We begin with a simple intuition: some closures can readily be
 transmitted to the other end of the wire, namely ones that have no
 free variables.  For the present we make a simplifying assumption,
 that every node is running the same code.  (We return to the question
@@ -1300,7 +1309,7 @@ main = runRemote (Just "config")
 \end{code}
 % $
 
-When the program starts, it first calls the framework's \textt{remoteInit} function, which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{remoteInit} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{remoteInit} in order to be able to invoke closures.
+When the program starts, it first calls Cloud Haskell's function \textt{remoteInit}, which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{remoteInit} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{remoteInit} in order to be able to invoke closures.
 
 The \textt{go} function is split into two parts: one which will run on nodes designated as masters, and one which will run on nodes designated as workers. Whether a node is master or worker is determined by its role, which is set in the configuration file or by a command-line argument. In this application, all work is initiated by the master. The master starts by calling \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands to the counter and then queries the new value, which it outputs, before asking the process to shut itself down.
 
@@ -1368,7 +1377,7 @@ Implementing a framework for distributed computing in Haskell has been done befo
 Thanks to Alan Mycroft for support and helpful feedback. 
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
-$\sigma \nfn \tau$.
+$\sigma \nfn \tau$.  Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
 
 % The bibliography should be embedded for final submission.
 
