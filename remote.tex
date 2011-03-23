@@ -209,7 +209,9 @@ Processes A and B do not share memory, even though they are running on the same 
 In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
 We discuss this point further in Section~\ref{s:serialization}.
 
-\subsection{Messages to processes}%: \label{s:sendAndExpect}\label{s:sendAndExpect}
+\subsection{Messages to processes}
+%: \label{s:sendAndExpect}
+\label{s:sendAndExpect}
 
 Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
 There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}.}:
@@ -613,13 +615,6 @@ ping2 pingout pongin =
 \end{code}
 
 
-How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. 
-How do we start a new process?
-This requires sending a function to a remote node; in the general case, a function consists not only of code, but also of the bindings of the free variables of that code\,---\,its environment.
-This \pair{code}{environment} pair is called a closure.
-
-
-\apb{This doesn't fit here}
 
 \subsection{Combining ports}
 One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of a particular type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive.
