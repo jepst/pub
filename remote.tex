@@ -596,8 +596,24 @@ This \pair{code}{environment} pair is called a closure.
 \apb{This doesn't fit here}
 
 \subsection{Combining ports}
-One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive one message of known type. Where, then, is the analogous 
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of one type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive.
 
+It would be simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition that may result in messages being extracted from a channel and then discarded without being processed. There's no way to put a message back in a channel once it's been read out, so we need some way to ensure that exactly one message will be extracted at a time from a group of $n$ \textt{ReceivePort}s.
+
+Haskell's Software Transactional Memory (STM) helps us with this. STM provides a mechanism to compose receive transactions on individual message queues. We expose this functionality to the user through the \textt{mergePorts} family of functions.
+
+\begin{code}
+mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
+mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
+\end{code}
+
+Given a list of \textt{ReceivePort}s of the same message type, these functions will return a new \textt{ReceivePort} that, when read with \textt{receiveChan}, will provide a message taken from any of the input \textt{ReceivePort}s. You can visualize that these functions take several ``feeder'' ports and squeeze them together into a ``merged'' port. Even after producing the merged \textt{ReceivePort}, the original ports may continue to be used independently. Messages read from the merged port are extracted from the queue of the feeder port, and so it's impossible to receive the same message twice.
+
+\textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port already has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports strictly in the order that they were provided to \textt{mergePortsBiased}. Thus, the port is ``biased'' towards the first feeder port. In that case, if the first feeder port always has message waiting, it could starve the other ports.
+
+To alleviate the problem of bias in merged ports, use \textt{mergePortsRR} instead. The port created by \textt{mergePortsRR}, unlike that created by \textt{mergePortsBiased}, will rotate the order in which the feeder ports are queried with each subsequent read. The effect is a fairer ``round-robin'' multiplexing, which will guarantee that, given enough reads on the merged port, every feeder port will eventually have a chance to contribute a message from its queue.
+
+\je{Also mention combinePorts\{Biased,RR\} (which take ports of different types)? It seems like a digression.}
 
 \section{Closures}
 \label{Closures}
@@ -1265,7 +1281,7 @@ Some of the features used in the framework include:
 
 \begin{itemize}
 \item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; that is, each incoming network connection is handled by forking a new thread.
-\item The low-level handling of message queues was implemented with Haskell's software transactional memory (STM) library. The ability to roll back unsuccessful transactions was important in implementing typed channels. In particular, our framework's \textt{combinePorts} family of functions allows the programmer to multiplex reads across multiple channels, possibly of different types. This functionality was surprisingly easy to implement with STM's \textt{orElse}.
+\item The low-level handling of message queues was implemented with Haskell's software transactional memory (STM) library. The ability to roll back unsuccessful transactions was important in implementing typed channels. In particular, our framework's \textt{mergePorts} family of functions allows the programmer to multiplex reads across multiple channels, possibly of different types. This functionality was surprisingly easy to implement with STM's \textt{orElse}.
 \item The compile-time Template Haskell suite was used to write \textt{remotable}, which automatically generates code necessary to invoke remote functions.
 \end{itemize}
 
