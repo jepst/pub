@@ -780,7 +780,8 @@ allows one to serialize \emph{any value at all}, and transports it to the
 other end of the wire.  
 Now, function closures can be serialized by
 serializing their free variables, and adding a representation of their code.
-This approach is used by Glasgow Distributed Haskell \cite{gdh2001} and JoCaml~\cite{joCaml} \spj{check!!!}.
+This approach is used by Glasgow Distributed Haskell \cite{gdh2001} and
+many other higher-order distributed languages (see Section~\ref{s:related}).
 
 Making serializability built-in
 has multiple disadvantages:
@@ -1553,13 +1554,47 @@ With our task framework, we hope to provide functionality similar to well-known 
 
 % Isis/Paxos/virtual synchrony consensus?
 
-\section{Related work}
+\section{Related work} \label{s:related}
 
 In scientific computing, the most well-known solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is optimized for supercomputers, rather than clusters of networked commodity PCs. 
 
-There have been lots of mechanisms for executing functions on remote systems. Specific to Java is the Remote Method Invocation (RMI) \cite{javarmi}. CORBA proides the Interface Description Language (IDL) \cite{corbaidl} to define implementation-language-independent remote functions. Web services often use the SOAP standard to implement remote procedure call.
+There have been lots of mechanisms for executing functions on remote
+systems. Specific to Java is the Remote Method Invocation (RMI)
+\cite{javarmi}. CORBA proides the Interface Description Language (IDL)
+\cite{corbaidl} to define implementation-language-independent remote
+functions. Web services often use the SOAP standard to implement
+remote procedure call.
 
-Implementing a framework for distributed computing in Haskell has been done before, in the form of Glasgow Distributed Haskell \cite{gdh2001}. Unlike our work, it tries to maintain the semantics of shared-memory concurrency in a distributed environment, rather than insisting on message-based communication between nodes.
+Implementing a framework for distributed computing in Haskell has been
+done before, in the form of Glasgow Distributed Haskell
+\cite{gdh2001}. Unlike our work, it tries to maintain the semantics of
+shared-memory concurrency in a distributed environment, rather than
+insisting on message-based communication between nodes. We argue that this is 
+undesirable becuase its cost model is hidden.  
+
+Our operations on channels are somewhat reminiscent of Concurrent ML's events \cite{reppy:book},
+but CML does not support distribution because that is incompatible with its
+model of synchronisation.  paraML, an experimental variant of CML, did have
+a distributed implementation; its serialisation mechanism was entirely built-in \cite{bailey:paraml}.
+
+The Acute language does a very solid job of dealing with type-safe
+marshalling, based on passing type representations at runtime
+\cite{acute:jfp}.  Serialization is mostly built-in, with some
+programmer control offered for ``rebinding'', when values should be
+rebound rather than serialised.  HashCaml is (alpha-release)
+implemented variant of OCaml that supports type-safe distributed
+programming, including serialization of function values.  Like Actue
+it uses explicit type passing, the details of how the free variables
+of function closures are marshalled are hazy.  Rossberg's language
+Alice likewise supports type-safe distributed programming
+\cite{rossberg:alice}.  Again, functions closures may be serialised,
+but that is regarded as a built-in service of the runtime system.
+
+Every one of these systems fundamentally regards serialization of closures
+as a built-in service.  In contrast, our work puts the programmer in
+complete control of serialization, via tha usual type-class mechanism.
+Exposing conversion is a significant cost, but one that also exposes the
+cost model, and can in any case be ameliorated with syntactic sugar.
 
 % more here?
 
