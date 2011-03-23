@@ -997,7 +997,7 @@ This splice expands to the following definitions
   add1__dec bs = add1 (decode bs)
 
   __remoteTable :: [(String, Dynamic)]
-  _remoteTable = [("add1", toDyn add1__dec)]
+  __remoteTable = [("add1", toDyn add1__dec)]
 \end{code}
 We will see how these definitions work next.
 
