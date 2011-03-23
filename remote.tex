@@ -72,6 +72,7 @@
                {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
                {\\\\}{{\char`\\\char`\\}}1
                {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+               {/=}{{$\neq$}}1
                {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
 %               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
                {>>}{{>>}}2 {>>=}{{>>=}}2
@@ -190,12 +191,18 @@ However, unlike Erlang, our framework supports the use of explicit shared-memory
 \end{itemize}
 
 \section{Processes and messages}
+We start with an overview of the basic elements of Cloud Haskell:
+processes, messages, what can be sent in a message and provision for failure.
+All of the elements of our DSL are listed in Figure~\ref{fig:api}.
 \subsection{Processes}
 %: \label{Processes}
 \label{Processes}
-The basic unit of concurrency in our framework is the {\em process}. A process is a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
+The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-\begin{figure}[!b]
+In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
+We discuss this point further in Section~\ref{s:serialization}.
+
+\begin{figure}[t]
 \centerline {
 \includegraphics[width=\columnwidth]{threadsAndProcesses}
 }
@@ -206,8 +213,6 @@ Processes A and B do not share memory, even though they are running on the same 
 }
 \end{figure}
 
-In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
-We discuss this point further in Section~\ref{s:serialization}.
 
 \subsection{Messages to processes}
 %: \label{s:sendAndExpect}
@@ -223,7 +228,6 @@ send :: (Serializable a) => ProcessId -> a
 expect :: (Serializable a) => ProcessM a
 \end{code}}
 \noindent
-(These type signatures, and those of all of the functions mentioned in this paper, are collected in Figure~\ref{fig:api}.)
 
 Before we discuss these primitives in detail, let's look at an example of their use.
 \textt{ping} is a process that accepts ``pong'' messages and responds by sending a ``ping'' to whatever process sent the pong. Using \textt{send} and \textt{expect}, the code for such a process would look like this:
@@ -252,36 +256,44 @@ ping() -> receive
 
 These two programs have similar structure. Both \textt{ping} functions are designed to be run as processes. They each wait for a specific message to be received; the Haskell \textt{expect} function matches incoming messages by type, whereas in Erlang, messages are usually pattern-matched against tuples whose first element is a well-known atom. The programs wait for a ``pong'' message, and ignore all others. The ``pong'' message contains in its payload the process ID of a ``partner'', to whom the response message is sent; this message contains the process ID of the \textt{ping} process (\textt{self}). Finally, they wait for the next message by repeating with tail recursion.
 
-If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}\cite{GSWE}. Note that in the Erlang version, \textt{Ping} and \textt{Pong} are atoms, whereas in the Haskell version they are types, and so need to be declared explicitly. 
+%If this example looks familiar, it should: it's very close to the first distributed programming example given in {\em Getting Started with Erlang}\cite{GSWE}. 
+Note that in the Erlang version, \textt{Ping} and \textt{Pong} are atoms, whereas in the Haskell version they are types, and so need to be declared explicitly. 
 As given, the type declarations are incomplete; \textt{Ping} and \textt{Pong} need to be declared to be instances of the class \textt{Serializable}; we will discuss this in Section~\ref{s:serialization}.
 
-The \textt{send} function is our general-purpose message sending primitive; it packages up a chunk of (serializable) data of arbitrary type and transmits it (possibly over the network) to a particular process, selected by its \textt{ProcessId} argument.
+The \textt{send} function is our general-purpose message-sending primitive; it packages up a chunk of \emph{serializable} data of arbitrary type as a bag of bits, 
+together with a representation of that type (a \textt{TypeRep}), and transmits both (possibly over the network) to a particular process, selected by the \textt{ProcessId} argument.
 Upon receipt, the incoming message will be placed in a message queue associated with the destination process. 
-The \textt{send} function corresponds to the \texttt{!} operator of Erlang.
+The \textt{send} function corresponds to Erlang's \textt{!} operator.
 
 At the far end of the channel, the simplest way of receiving a message is with \textt{expect}, which
 examines the message queue associated with the current process and extracts the first message whose type matches the (inferred) type of \textt{expect}\,---\,a \textt{Ping} message in the example.  
-\textt{expect} dequeues the message, unpacks the transmitted data and returns it.
-If there is no message of the right type on the queue, \textt{expect} waits for one to arrive.
+The implementation of \textt{expect} looks down the queue for a message with the right type representation, 
+dequeues that message, parses the bag of bits into a data item of the right type, and returns it.
+If there is no message of the appropriate type on the queue, \textt{expect} waits for one to arrive.
 
 \subsection{Serialization} 
 %: \label{s:serialization}
 \label{s:serialization}
 
-When we say that the data to be transmitted must be serializable, we mean that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type class).
-\textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data  item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a representation of the item's type.  
+When we said that the data to be transmitted must be serializable, we meant that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type class).
+\textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a \textt{TypeRep} that captures the item's type.  
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send an \textt{MVar} to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
+While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and can therefore be part of a message, some data types are emphatically \emph{not} serializable. 
+One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar}s allows communication between threads on the assumption of shared memory, it isn't helpful to send an \textt{MVar} to a remote process that may not share memory with the current process. 
+Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. 
+Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  
+Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
+The same is true for \textt{TVar}s: the fact that they are non-serializable guarantees that \textt{STM} transactions 
+do not span processes, but the programmer is free to use STM \emph{within} a process.  
+In fact, our implementation uses STM to protect the message queue, as discussed in Section~\ref{s:Implementation}.
 
 %Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
 
 %In the ping example above, we use \textt{receiveWait} and \textt{match} to accept messages only of type \textt{Pong}. The type of message to accept is specified through Haskell's type inference: the lambda function given as the first parameter to \textt{match} has type \lstinline!Pong -> ProcessM ()!, and so that invocation of \textt{match} will accept messages only of type \textt{Pong}.
 
-\subsection{Starting processes}
-\spj{This whole section needs a rewrite, and probably dramatically shortening, in the light the closures section}
+\subsection{Starting and Locating Processes}
 
-%\setlength{\parindent}{-3in}
 \begin{figure}[t!]
 \small
 \renewcommand{\baselinestretch}{0.75}
@@ -376,15 +388,25 @@ decode :: Binary a => ByteString -> a
 \end{figure}
 
 
-To start a new process in a distributed system, we need a way of specifying where a process will run. The question of {\em where} is answered with our framework's unit of location, the node. A node can be thought of as an independent address space. Each node is named by a \textt{NodeId}, a unique identifier that contains an IP address that can be used to communicate with the node. So, to be able to start a process, we want a function named \textt{spawn} that takes two parameters: a \textt{NodeId} that specifies where the new process should run, and some expression of what code should be run there. Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. The \textt{spawn} function should then return a \textt{ProcessId}, which can be used with \textt{send}.  Since the \textt{spawn} function itself depends on messaging, it, too, will be in the \textt{ProcessM} monad. As a first draft, let's consider this possibility:
+To start a new process in a distributed system, we need a way of specifying where that process will run. 
+The question of {\em where} is answered with Cloud Haskell's unit of location, the node. 
+A node can be thought of as an independent address space.
+Each node is named by a \textt{NodeId}, a unique identifier that contains an IP address that can be used to communicate with the node. 
+So, to be able to start a process, we want a function named \textt{spawn} that takes two parameters: 
+a \textt{NodeId} that specifies where the new process should run, and some expression of what code should be run there. 
+Since we want to run code that is able to receive messages, the code should be in the \textt{ProcessM} monad. 
+The \textt{spawn} function should then return a \textt{ProcessId}, which can be used with \textt{send}.  
+Since \textt{spawn} will itself depend on messaging, it, too, will be in the \textt{ProcessM} monad. 
+So, its type will be something like:
 
 \begin{code}
 -- wrong
 spawn :: NodeId -> ProcessM () -> ProcessM ProcessId
 \end{code}
 
-In combination with the \textt{ping} and \textt{pong} functions, it could be used like this:
+In combination with the \textt{ping} and \textt{pong} functions, \textt{spawn} could be used like this:
 
+\needspace{4ex}
 \begin{code}
 -- wrong
 do { pingProc <- spawn someNode ping
@@ -392,33 +414,57 @@ do { pingProc <- spawn someNode ping
    ; send pingProc (Pong pongProc) }
 \end{code}
 
-This code is supposed to start two new processes, located on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial \textt{Pong} message to the ping process.
+This code is intended to start two new processes, located on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial \textt{Pong} message to the ping process.
 
-To understand why this version of \textt{spawn} is wrong, consider what is required to  implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \textt{spawn} can be implemented using \textt{send}.  \textt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \textt{spawn}. In the above case, the call to \textt{spawn} would send a message containing the function \textt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \textt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
-
-Serializing a function means serializing two things: a representation of its code, and a representation of its environment, more precisely, the bindings of its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
-
+In Cloud Haskell, the actual type of spawn is
 \begin{code}
--- wrong
-printSumSomewhere :: NodeId -> Int -> ProcessM ()
-printSumSomewhere aNode i =
-  let nums = [0..i]
-      fun = liftIO (putStrLn (show (sum nums)))
-   in spawn aNode fun
+spawn :: NodeId -> Closure (ProcessM ()) 
+      -> ProcessM ProcessId
 \end{code}
+\noindent
+The difference between this and our initial guess is that the second argument to \textt{spawn} is \textt{Closure (ProcessM ())} rather than just \textt{ProcessM ()}.
+Serializing a function means serializing two things: a representation of its code, and a representation of its environment\,---\,more precisely, the bindings of its free names.
+A \textt{Closure} is exactly this, but the details of closures turn out to be surprisingly tricky, and working through them is one of the main contributions of Cloud Haskell.
+We discuss this at length in Section~\ref{s:closures}.
 
-This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
 
-There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
-\apb{Isn't this a perfect job for Template Haskell?}
+%Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
+%
+%\begin{code}
+%-- wrong
+%printSumSomewhere :: NodeId -> Int -> ProcessM ()
+%printSumSomewhere aNode i =
+%  let nums = [0..i]
+%      fun = liftIO (putStrLn (show (sum nums)))
+%   in spawn aNode fun
+%\end{code}
+%
+%This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
+%
+%There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+%\apb{Isn't this a perfect job for Template Haskell?}
+%
+%Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
+%
+%Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. 
+%An explicit interface puts the programmer in control of these choices, whereas automating them wrests control away.
+%This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
+%a captured environment is never transmitted implicitly. 
+%We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
+%=======
+%This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
+%
+%There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+%\apb{Isn't this a perfect job for Template Haskell?}
+%
+%Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
+%
+%Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. 
+%An explicit interface puts the programmer in control of these choices, whereas automating them wrests control away.
+%This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
+%a captured environment is never transmitted implicitly. 
+%We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in Section~\ref{s:serialization}.
 
-Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
-
-Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. 
-An explicit interface puts the programmer in control of these choices, whereas automating them wrests control away.
-This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
-a captured environment is never transmitted implicitly. 
-We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in Section~\ref{s:serialization}.
 
 \subsection{Fault Tolerance}
 %: \label{FaultTolerance}
@@ -579,7 +625,7 @@ receiveTimeout :: Int -> [MatchM q ()] ->
 \end{code}
 
 \noindent
-Thus we can translate the Erlang example into Haskelll:
+Thus we can translate the Erlang example into Haskell:
 
 \begin{code}
 do { send pid (Query stuff)
@@ -588,11 +634,11 @@ do { send pid (Query stuff)
             return answer)  ]
    ; case res of
        Nothing -> showError "Timeout!"
-       Just ans -> showAnswer ans
+       Just ans -> showAnswer ans  }
 \end{code}
 %\)
 
-\textt{receiveTimeout} can be called with a timeout value of zero, which has the effect of checking for a matching message in the queue and returning immediately if no match is found. This behavior also works with Erlang's \textt{receive...after} syntax.
+As with Erlang's \textt{receive...after} syntax, \textt{receiveTimeout} can be called with a timeout value of zero, which has the effect of checking for a matching message in the queue and returning immediately if no match is found.
 
 \section{Messages through channels}
 In the previous sections, we've shown how a message can be sent to a process. As you can see from the type of \textt{send}, any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e., dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that messages are sent to receivers who know how to deal with them?
@@ -647,7 +693,7 @@ If this biased behavior is undesirable, use \textt{mergePortsRR} instead. The po
 % \apb{This sounds like a new subsection to me, but an important one, I think.}
 
 \section{Closures}
-\label{Closures}
+\label{s:closures}
 
 % ----------------------------------------------- BEGIN SIMON
 
@@ -1309,6 +1355,8 @@ a little less convenient for the programmer:
 % other features? channel combining, peer discovery, multiple nodes per machine
 
 \section{Implementation}
+%: \label{s:Implementation}
+\label{s:Implementation}
 The framework has been tested with recent versions of the Glasgow Haskell Compiler (GHC). Since it uses some advanced features of GHC that aren't yet available in other compilers, we expect it to support only GHC for the near future.
 
 Some of the features used in the framework include:
