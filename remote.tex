@@ -296,9 +296,11 @@ In fact, our implementation uses STM to protect the message queue, as discussed 
 
 \begin{figure}[t!]
 \small
-\renewcommand{\baselinestretch}{0}
+\renewcommand{\baselinestretch}{0.75}
 \textbf{Basic messaging} 
 \begin{code}
+instance Monad ProcessM
+instance MonadIO ProcessM
 send   :: Serializable a => ProcessId -> a
        -> ProcessM ()
 expect :: Serializable a => ProcessM a
@@ -319,6 +321,7 @@ mergePortsRR :: Serializable a => [ReceivePort a]
 
  \textbf{Advanced messaging}
 \begin{code}
+instance Monad MatchM
 receiveWait    :: [MatchM q ()] -> ProcessM q
 receiveTimeout :: Int -> [MatchM q ()] 
                -> ProcessM (Maybe q)
@@ -424,6 +427,7 @@ Serializing a function means serializing two things: a representation of its cod
 A \textt{Closure} is exactly this, but the details of closures turn out to be surprisingly tricky, and working through them is one of the main contributions of Cloud Haskell.
 We discuss this at length in Section~\ref{s:closures}.
 
+
 %Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
 %
 %\begin{code}
@@ -447,6 +451,20 @@ We discuss this at length in Section~\ref{s:closures}.
 %This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
 %a captured environment is never transmitted implicitly. 
 %We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
+%=======
+%This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
+%
+%There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+%\apb{Isn't this a perfect job for Template Haskell?}
+%
+%Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
+%
+%Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. 
+%An explicit interface puts the programmer in control of these choices, whereas automating them wrests control away.
+%This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
+%a captured environment is never transmitted implicitly. 
+%We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in Section~\ref{s:serialization}.
+
 
 \subsection{Fault Tolerance}
 %: \label{FaultTolerance}
@@ -504,21 +522,30 @@ How can we provide similar functionality in Haskell?
 
 \subsection{Receiving and Matching}
 
-Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. 
-We can imagine three types of messages:
+Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. Imagine that a process should be able to perform mathematical operations remotely, and should be able to respond to two values: \textt{Add pid a b}, and \textt{Divide pid num den}. In response, the client process will be sent value \textt{Answer Double} or a \textt{DivByZero} error message if there was an attempt to divide by zero. One could create a message type encapsulating all these variants, suitable for use with \textt{expect}:
+
+\begin{code}
+data MathOp = Add ProcessId Double Double
+            | Divide ProcessId Double double
+            | Answer Double
+            | DivByZero
+\end{code}
+
+The problem with using a sum type, as above, is that \textt{expect} can only filter messages by type. Thus, a process receiving \textt{MathOps} messages would need to be able to respond to all variants, even those that don't make sense: presumably, only client processes should receive \textt{Answer} and \textt{DivByZero} while only the calculating process should receive \textt{Add} and \textt{Divide}. Putting all messages into a single data type breaks modularity by exposing details of the process to the client; when we add a new mathematical operation, every client will need to update its code, even if it doesn't use that operation. 
+
+In order to avoid this kind of false dependency, it's better to break the single \textt{MathOp} type into several types which can be handled separately. We can imagine three types of messages:
 
 \begin{code}
 data Add = Add ProcessId Double Double
 data Divide = Divide ProcessId Double Double
 data DivByZero = DivByZero
 \end{code}
-\apb{Maybe ``Additive'' rather than ``Add'', so simplify the discussion of whet happens if a second constructor is present (``Subtract'')?}
 
-Clearly, \textt{expect} is not up to the task of translating the above code. 
-\apb{This isn't so clear to me.  Can't I define \texttt{type M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
-\je{Yep, you can do that. As we discovered while playing around with POTS, you can always just combine your types. Thus receiveWait/match are convenient for cases where you don't want to or can't do that, but I'm not sure how to illustrate that.}
-\textt{expect} can accept only one type of message, and will block until a message of that type is put into the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
+In addition to the above types, the answer can be sent to the client simply as a message of type \textt{Double} --- no wrapper required. But now we have a different quandary: although \textt{expect} can receive any type of message, it can only receive one type of message at a time, and will block until a message of that type is put into the message queue. So there's no way to handle the above message types if we don't know the order that the client is going to send \textt{Add}s and \textt{Divide}s. In other words, we need an alternative to \textt{expect} that provides the notion of {\em choice}.
 
+%\apb{Maybe ``Additive'' rather than ``Add'', so simplify the discussion of whet happens if a second constructor is present (``Subtract'')?}
+
+How, then, can we represent the multi-pronged choices of Erlang's \textt{receive} syntax? 
 First, let's consider how to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts a message handling function as a parameter.
 When a message of the appropriate type is received, the handler function should be applied to it. 
 
@@ -648,14 +675,7 @@ ping2 pingout pongin =
 
 
 \subsection{Combining ports}
-One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of a particular type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive.
-
-It would be simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition that may result in messages being extracted from a channel and then discarded without being processed. 
-\apb{Why?  I don't see the problem that you refer to.}
-There's no way to put a message back in a channel once it's been removed, so we need some way to ensure that exactly one message will be extracted at a time from a group of $n$ 
-\mbox{\textt{ReceivePort}s}.
-
-Haskell's Software Transactional Memory (STM) helps us with this. STM provides a mechanism to compose receive transactions on individual message queues. We expose this functionality to the user through the \textt{mergePorts} family of functions.
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of a particular type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive. We expose this functionality to the user through the \textt{mergePorts} family of functions.
 
 \begin{code}
 mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
@@ -669,8 +689,8 @@ So, if the first feeder port always has a message waiting, it could starve the o
 
 If this biased behavior is undesirable, use \textt{mergePortsRR} instead. The port created by \textt{mergePortsRR} will rotate the order in which the feeder ports are queried with each subsequent read. The effect is a fairer ``round-robin'' multiplexing, which will guarantee that, given enough reads on the merged port, that every feeder port will eventually have a chance to contribute a message from its queue.
 
-\je{Also mention combinePorts\{Biased,RR\} (which take ports of different types)? It seems like a digression.}
-\apb{This sounds like a new subsection to me, but an important one, I think.}
+% \je{Also mention combinePorts\{Biased,RR\} (which take ports of different types)? It seems like a digression.}
+% \apb{This sounds like a new subsection to me, but an important one, I think.}
 
 \section{Closures}
 \label{s:closures}
@@ -1342,7 +1362,9 @@ Some of the features used in the framework include:
 
 \begin{itemize}
 \item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; that is, each incoming network connection is handled by forking a new thread.
-\item The low-level handling of message queues was implemented with Haskell's software transactional memory (STM) library. The ability to roll back unsuccessful transactions was important in implementing typed channels. In particular, our framework's \textt{mergePorts} family of functions allows the programmer to multiplex reads across multiple channels, possibly of different types. This functionality was surprisingly easy to implement with STM's \textt{orElse}.
+\item The implementation for the \textt{mergePorts} family of function was tricky to implement. It would have been simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition: imagine what would happen if messages are received simultaneously on two threads and extracted concurrently. Only one can be returned, and because there's no way to put messages back in the channel in the original order, we would need to either re-order the message or discard it.
+
+Haskell's Software Transactional Memory (STM) helps us with this. STM provides a mechanism to compose receive transactions on individual message queues. 
 \item The compile-time Template Haskell suite was used to write \textt{remotable}, which automatically generates code necessary to invoke remote functions.
 \end{itemize}
 
@@ -1355,7 +1377,7 @@ A disadvantage of missing the dynamic updating is that code needs to be distribu
 \section{Example}
 As a practical example, we present a complete, albeit trivial, example of a distributed application. The application provides a remote counter, which can be incremented and queried by a client process. This example mirrors a similar example in Erlang, presented in ???? \je{what was the name of that book?}. We'll discuss every necessary step to actually get results from this example, including the configuration and deployment process.
 
-Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle run several nodes of a distributed application on a single computer, the benefits of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which you'll deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \texttt{acs-01} \texttt{acs-02}.
+Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle run several nodes of a distributed application on a single computer, the benefits of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which you'll deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \texttt{acs-01} and \texttt{acs-02}.
 
 The framework supports several configuration options, only a few of which are useful in the general case. These options can be set in a configuration file, which is loaded by the program, or on the command line of the program. Here, we'll describe how to create a suitable configuration file.
 
@@ -1395,7 +1417,7 @@ module Main where
 data CounterMessage = CounterQuery ProcessId %\label{c_type}
                     | CounterShutdown
                     | CounterIncrement 
-                    deriving (Typeable,Data)
+                    deriving (Typeable)
 -- omitted: Serializable instance of CounterMessage
 
 counterLoop :: Int -> ProcessM ()
@@ -1511,7 +1533,7 @@ Implementing a framework for distributed computing in Haskell has been done befo
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
-Great thanks go to Alan Mycroft for his support and helpful feedback. 
+Jeff Epstein would like to give great thanks go to Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
 
