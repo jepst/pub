@@ -470,6 +470,7 @@ data DivByZero = DivByZero
 
 Clearly, \textt{expect} is not up to the task of translating the above code. 
 \apb{This isn't so clear to me.  Can't I define \texttt{type M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
+\je{Yep, you can do that. As we discovered while playing around with POTS, you can always just combine your types. Thus receiveWait/match are convenient for cases where you don't want to or can't do that, but I'm not sure how to illustrate that.}
 \textt{expect} can accept only one of type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
 
 First, let's consider how to specify to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts as a parameter a function that maps a message to an action. \textt{match}'s job is to determine if a message in the queue has the appropriate type, and if so to invoke the user-provided function with the message as its argment.
@@ -582,7 +583,7 @@ ping2 pingout pongin =
 How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. But how do we start a new process?
 
 \subsection{Combining ports}
-One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive one message of known type. Where, then, is the analogous //!!
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive one message of known type. Where, then, is the analogous 
 
 \section{Closures}
 \label{Closures}
