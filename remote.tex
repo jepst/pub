@@ -32,6 +32,7 @@
 \usepackage[pdftex]{graphicx}
 \usepackage{verbatim} % only for comment environment
 \usepackage{ifthen}
+\usepackage{needspace}
 \usepackage{url}
 \urlstyle{sf}
 
@@ -208,7 +209,7 @@ Processes A and B do not share memory, even though they are running on the same 
 In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
 We discuss this point further in Section~\ref{s:serialization}.
 
-\subsection{Messages to processes}
+\subsection{Messages to processes}%: \label{s:sendAndExpect}\label{s:sendAndExpect}
 
 Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
 There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}.}:
@@ -265,10 +266,10 @@ If there is no message of the right type on the queue, \textt{expect} waits for 
 %: \label{s:serialization}
 \label{s:serialization}
 
-When we say that the data to be transmitted must be serializable, we mean that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}).
+When we say that the data to be transmitted must be serializable, we mean that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type class).
 \textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data  item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a representation of the item's type.  
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send it to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
+While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and therefore can be part of a message, some data types are emphatically not serializable. One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar} allows communication between threads on the assumption of shared memory, it isn't helpful to send an \textt{MVar} to a remote process that may not share memory with the current process. Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
 
 %Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
@@ -390,7 +391,7 @@ This code is supposed to start two new processes, located on \textt{someNode} an
 
 To understand why this version of \textt{spawn} is wrong, consider what is required to  implement it. Assuming we have the ability to send messages containing arbitrary serializable data, \textt{spawn} can be implemented using \textt{send}.  \textt{spawn} will send a message containing its second parameter to a ``spawning'' process on the remote node; that is, a process that starts new processes in response to messages received from \textt{spawn}. In the above case, the call to \textt{spawn} would send a message containing the function \textt{ping}. And there's the sticky wicket. We can easily imagine how to serialize a string, or a list, or an algebraic data type composed of primitive types, but \textt{ping} is none of these. It's a function. And what does it mean to serialize a function? The question is especially important in a language like Haskell, where so much depends on higher-order functions manipulating other functions as data.
 
-The other problem with serializing functions is that it isn't enough to serialize just the function: we also need its environment, precisely, its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
+Serializing a function means serializing two things: a representation of its code, and a representation of its environment, more precisely, the bindings of its free names. Some of the free names used by the \textt{ping} function, such as \textt{receiveWait}, are top-level. Assuming that the same code is running on all hosts (a nontrivial assumption), it's not necessary to transmit the value (that is, the actual code) of a top-level name, as we know that it already exists at the destination node. But consider how to serialize a function that has free names that are not top-level, such as this one:
 
 \begin{code}
 -- wrong
@@ -403,19 +404,23 @@ printSumSomewhere aNode i =
 
 This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
 
-There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables, as well. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
+\apb{Isn't this a perfect job for Template Haskell?}
 
 Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
 
-Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. There are several possible ways a language could balance these trade-offs, but the answer is likely to be somewhat arbitrary and not transparent to the programmer. This is another case where the programmer loses control of the cost model, and, again, we aimed for a more explicit interface.
+Finally, we should mention that in a non-strict language such as Haskell, implicit serialization of environment raises some thorny questions about what is evaluated and where. How, exactly, should \textt{fun}'s environment be serialized? One way would be for the value of \textt{nums} to be sent. Another way would be for the value of \textt{i} to be sent, along with a representation of \textt{nums} that depends on the value of \textt{i}. In the first option, depending on the size of \textt{nums}, a lot of data could potentially be transmitted. In the second option, there would probably be fewer bytes sent, at the cost of having to evaluate \textt{nums} remotely. 
+An explicit interface puts the programmer in control of these choices, whereas automating them wrests control away.
+This is another place where the programmer could loose control of the costs of the computation, and where we therefore choose an explicit interface:
+a captured environment is never transmitted implicitly. 
+We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
 
-In our framework, a captured environment is never transmitted implicitly. We accomplish this by restricting the set of serializable functions to those without non-top-level free variables. This is discussed further in section 3.
-
-\subsection{Fault tolerance}
+\subsection{Fault Tolerance}
 %: \label{FaultTolerance}
 \label{FaultTolerance}
-Fault tolerance in Cloud Haskell borrows many good ideas from Erlang. Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
-
+Fault tolerance in Cloud Haskell is based on ideas from Erlang. 
+%Erlang's \textt{link} and \textt{monitor} functions allow processes to request notification if another process terminates. We provide analogous functions that offer similar functionality.
+%
 The premise of Erlang-style fault tolerance is that, when something goes deeply wrong inside a process, the best course of action is for the process to terminate; attempting to glue the pieces back together with string and sealing wax will not lead to robustness.   Instead, another process should take over.  
 To make this possible, one process can monitor another process; if the monitored process terminates, the monitoring process will be notified. 
 Ascertaining the origin of the failure and recovering from it are left to the application or a higher-level framework, such as the Task framework briefly discussed in Section~\ref{s:futureWork}.
@@ -429,7 +434,7 @@ The functions for setting-up process monitoring are:
 
 \begin{code}
 monitorProcess :: ProcessId -> ProcessId
-               -> MonitorAction -> ProcessM ()
+               		-> MonitorAction -> ProcessM ()
 linkProcess    :: ProcessId -> ProcessM ()
 \end{code}
 
@@ -442,21 +447,29 @@ linkProcess    :: ProcessId -> ProcessM ()
 %: \label{s:matching}
 \label{s:matching}
 
-In the previous section, we introduced the \textt{expect} function, which lets us receive messages of a particular type. But what if our process wants to be able to accept messages of different types? Ideally, we'd like to be able to approximate the Erlang \textt{receive} syntax:
+In Section~\ref{s:sendAndExpect}, we introduced the \textt{expect} function, which lets us receive messages of a particular type. But what if our process wants to be able to accept messages of multiple types? Ideally, we'd like to be able to approximate the Erlang \textt{receive} syntax:
 \begin{lstlisting}[numbers=left,language=Erlang,escapeinside={\%}{\^^M}]
 math() ->
-  receive
-    {add, Pid, Num1, Num2} -> % \label{erl_addmatch}
-      Pid ! Num1 + Num2; % \label{erl_addhandler}
-    {divide, Pid, Num1, Num2} when Num2 /= 0 -> % \label{erl_divmatch}
-      Pid ! Num1 / Num2;
-    {divide, Pid, _, _} ->
-      Pid ! div_by_zero
-  end,
-  math().
+   receive
+      {add, Pid, Num1, Num2} -> % \label{erl_addmatch}
+         Pid ! Num1 + Num2; % \label{erl_addhandler}
+      {divide, Pid, Num1, Num2} when Num2 /= 0 -> % \label{erl_divmatch}
+         Pid ! Num1 / Num2;
+      {divide, Pid, _, _} -> % \label{erl_nonzero}
+         Pid ! div_by_zero
+   end,
+   math().
 \end{lstlisting}
 
-This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, which are (by convention) all tuples. Each pattern has a corresponding message-handling action. At line \ref{erl_addmatch}, it matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it receives a message matching that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends the sum of the two numbers. In the next pattern, on line \ref{erl_divmatch}, it responds similarly to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the optional \textt{where} syntax. Finally, the third pattern will send a \textt{div_by_zero} atom in response to requests for division in those cases not matched by the previous patterns, which is to say, those cases when the divisor is zero. Patterns are tested against each message in the order that they appear, so that the last pattern will only be reached if the first two fail to match.
+This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, which are (by convention) all tuples. Each pattern has a corresponding message-handling action. 
+Line \ref{erl_addmatch} attempts to matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it finds a message of that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends back the sum of the two numbers. 
+In the next pattern, on line \ref{erl_divmatch}, the code responds to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the \textt{when} syntax. 
+Finally, the third pattern (line \ref{erl_nonzero}) will send back a \textt{div_by_zero} atom in response to all messages not matched by the previous patterns, which is to say, those cases when the divisor is zero.
+Patterns are tested against each message in the order that they appear, so that the last pattern will be reached only if the first two fail to match.
+If no patterns match, the whole receive statement is repeated for the next element of the message queue, and so on until a match is found or the queue is exhausted.
+How can we provide similar functionality in Haskell?
+
+\subsection{Receiving and Matching}
 
 Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. 
 We can imagine three types of messages:
@@ -471,15 +484,18 @@ data DivByZero = DivByZero
 Clearly, \textt{expect} is not up to the task of translating the above code. 
 \apb{This isn't so clear to me.  Can't I define \texttt{type M = Add | Divide | DivByZero}?  Then there is one type, a sum type, and I can check to see which element of the sum I have received using pattern matching.  This is not so different from Erlang, is it?}
 \je{Yep, you can do that. As we discovered while playing around with POTS, you can always just combine your types. Thus receiveWait/match are convenient for cases where you don't want to or can't do that, but I'm not sure how to illustrate that.}
-\textt{expect} can accept only one type of message, and will block until a message of that type is put in the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
+\textt{expect} can accept only one type of message, and will block until a message of that type is put into the message queue. In the interim, any other messages will simply accumulate in the message queue. How can we represent the branching structure of Erlang's \textt{receive} in Haskell?
 
-First, let's consider how to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts as a parameter a message handler. That message handler should be invoked when a message of the appropriate type is received. 
+First, let's consider how to specify a pair consisting of a message type and its corresponding action. We introduce \textt{match}, which accepts a message handling function as a parameter.
+When a message of the appropriate type is received, the handler function should be applied to it. 
 
 \begin{code}
 match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
 \end{code}
 
-When \textt{match} tests an incoming message, it is comparing the type of the incoming message against the type \textt{a}, the parameter of the message handler. Any message of that type will be considered matched, will be removed from the message queue, and will be given as a parameter to the message handler.
+When \textt{match} tests an incoming message, it is comparing the type of the incoming message against the type \textt{a}, the parameter of the message handler. 
+Any message of that type will be considered ``matched'': 
+it will be removed from the message queue, and given as an argument to the message handling function.
 
 \textt{match} is in the \textt{MatchM} monad, which is responsible for providing \textt{match} with the current state of the message queue, and then providing \textt{match}'s caller with the result of its test. \textt{match} will typically be used with \textt{receiveWait}, which mimics Erlang's \textt{receive} syntax by evaluating several \textt{MatchM}s in order. The value returned by the selected message action is also the return value of \textt{receiveWait}.
 
@@ -487,14 +503,18 @@ When \textt{match} tests an incoming message, it is comparing the type of the in
 receiveWait :: [MatchM q ()] -> ProcessM q
 \end{code}
 
-And how can we handle Erlang's \textt{where} clause, which allows message acceptance to be qualified by a predicate? We offer \textt{matchIf}, whose first parameter is allowed to examine the incoming message without removing it from the queue.
+How can we mimic Erlang's \textt{when} clause, which allows message acceptance to be qualified by a predicate? 
+We do this with \textt{matchIf}, whose first parameter is a predicate that is allowed to examine the incoming message without removing it from the queue.
 
 \begin{code}
-matchIf :: Serializable a => (a -> Bool) -> (a -> ProcessM q) -> MatchM q ()
+matchIf :: Serializable a => (a -> Bool) -> 
+								(a -> ProcessM q) -> MatchM q ()
 \end{code}
 
-Below we implement the \textt{math} function in Haskell. Notice that the patterns from the Erlang version have been replaced with parameters to lambda functions.
+Now let's use these tools to implement the \textt{math} function in Haskell. 
+Notice that the patterns from the Erlang version have been replaced with arguments to match that are lambda functions.
 
+\needspace{14ex}
 \begin{code}
 -- omitted: Serializable instances for Add, Divide, and DivByZero types
 math :: ProcessM ()
@@ -522,7 +542,9 @@ expect :: (Serializable a) => ProcessM a
 expect = receiveWait [match return]
 \end{code}
 
-Whether we use \textt{receiveWait} directly or \textt{expect}, we run the risk that the function will block until a certain type of message arrives. What if we want to check the incoming message queue, but not wait indefinitely? Erlang lets us do this with the \textt{receive...after} syntax:
+\subsection{Matching without Blocking}
+
+Whether we use \textt{receiveWait} or \textt{expect}, we run the risk that the function will block until a certain type of message arrives. What if we want to check the incoming message queue, but not wait indefinitely? Erlang lets us do this with the \textt{receive...after} syntax:
 
 \begin{lstlisting}[language=Erlang,escapeinside={\%}{\^^M}]
 Pid ! {query, Stuff},
@@ -538,9 +560,11 @@ end
 This code will wait at most 50 seconds to receive a response to its query; after 50 seconds, it will stop waiting and display an error message. Our framework's corresponding function is \textt{receiveTimeout}, which is very similar to \textt{receiveWait}. Like \textt{receiveWait}, it takes a list of \textt{match}es, but it also takes a timeout value. If the timeout is exceeded, the function returns \textt{Nothing}.
 
 \begin{code}
-receiveTimeout :: Int -> [MatchM q ()] -> ProcessM (Maybe q)
+receiveTimeout :: Int -> [MatchM q ()] -> 
+											ProcessM (Maybe q)
 \end{code}
 
+\noindent
 Thus we can translate the Erlang example into Haskelll:
 
 \begin{code}
@@ -554,14 +578,14 @@ do { send pid (Query stuff)
 \end{code}
 %\)
 
-\textt{receiveTimeout} can also be called with a timeout value of zero, which has the effect of checking for a matching message in the queue and returning immediately if no match is found. This behavior also works with Erlang's \textt{receive...after} syntax.
+\textt{receiveTimeout} can be called with a timeout value of zero, which has the effect of checking for a matching message in the queue and returning immediately if no match is found. This behavior also works with Erlang's \textt{receive...after} syntax.
 
 \section{Messages through channels}
-In the previous section, we've shown how a message can be sent to a process. As you can see from the type of \textt{send}, any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e., dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
+In the previous sections, we've shown how a message can be sent to a process. As you can see from the type of \textt{send}, any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e., dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that messages are sent to receivers who know how to deal with them?
 
 To offer this assurance, we provide distributed {\em typed channels} as an alternative to sending messages directly to a process. Each channel consists of two ends, which we call the {\em send port} and the {\em receive port}. Messages are inserted via the send port, and extracted in FIFO order from the receive port. Unlike process identifiers, channels are created with a specific type: the send port will accept messages only of that type, and consequently the receive port will proffer messages only of that type.
 
-The central functions of the channel API are:
+The central functions of the channel interface are:
 \par{\small
 \begin{code}
 newChan  :: Serializable a 
@@ -598,9 +622,12 @@ This \pair{code}{environment} pair is called a closure.
 \apb{This doesn't fit here}
 
 \subsection{Combining ports}
-One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of one type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive.
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of a particular type. Where, then, is the channel counterpart of \textt{receiveWait}? This is an important issue if we need to respond to messages on several channels, and we don't know on which channel the first will arrive.
 
-It would be simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition that may result in messages being extracted from a channel and then discarded without being processed. There's no way to put a message back in a channel once it's been read out, so we need some way to ensure that exactly one message will be extracted at a time from a group of $n$ \textt{ReceivePort}s.
+It would be simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition that may result in messages being extracted from a channel and then discarded without being processed. 
+\apb{Why?  I don't see the problem that you refer to.}
+There's no way to put a message back in a channel once it's been removed, so we need some way to ensure that exactly one message will be extracted at a time from a group of $n$ 
+\mbox{\textt{ReceivePort}s}.
 
 Haskell's Software Transactional Memory (STM) helps us with this. STM provides a mechanism to compose receive transactions on individual message queues. We expose this functionality to the user through the \textt{mergePorts} family of functions.
 
@@ -611,11 +638,13 @@ mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
 
 Given a list of \textt{ReceivePort}s of the same message type, these functions will return a new \textt{ReceivePort} that, when read with \textt{receiveChan}, will provide a message taken from any of the input \textt{ReceivePort}s. You can visualize that these functions take several ``feeder'' ports and squeeze them together into a ``merged'' port. Even after producing the merged \textt{ReceivePort}, the original ports may continue to be used independently. Messages read from the merged port are extracted from the queue of the feeder port, and so it's impossible to receive the same message twice.
 
-\textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port already has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports strictly in the order that they were provided to \textt{mergePortsBiased}. Thus, the port is ``biased'' towards the first feeder port. In that case, if the first feeder port always has message waiting, it could starve the other ports.
+\textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports strictly in the order that they were provided to \textt{mergePortsBiased}\,---\,in other words, the port is ``biased'' towards the first feeder port. 
+So, if the first feeder port always has a message waiting, it could starve the other ports.
 
-To alleviate the problem of bias in merged ports, use \textt{mergePortsRR} instead. The port created by \textt{mergePortsRR}, unlike that created by \textt{mergePortsBiased}, will rotate the order in which the feeder ports are queried with each subsequent read. The effect is a fairer ``round-robin'' multiplexing, which will guarantee that, given enough reads on the merged port, every feeder port will eventually have a chance to contribute a message from its queue.
+If this biased behavior is undesirable, use \textt{mergePortsRR} instead. The port created by \textt{mergePortsRR} will rotate the order in which the feeder ports are queried with each subsequent read. The effect is a fairer ``round-robin'' multiplexing, which will guarantee that, given enough reads on the merged port, that every feeder port will eventually have a chance to contribute a message from its queue.
 
 \je{Also mention combinePorts\{Biased,RR\} (which take ports of different types)? It seems like a digression.}
+\apb{This sounds like a new subsection to me, but an important one, I think.}
 
 \section{Closures}
 \label{Closures}
