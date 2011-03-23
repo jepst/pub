@@ -77,18 +77,18 @@
                {|}{{$\mid$}}1               
     }
 
+
 \conferenceinfo{ICFP 2011}{date, City.} 
 \copyrightyear{2011} 
 \copyrightdata{[to be supplied]} 
 
-\titlebanner{Haskell for the Cloud}        % These are ignored unless
-\preprintfooter{Haskell for the Cloud}   % 'preprint' option specified.
-
+\titlebanner{Haskell for the cloud}        % These are ignored unless
+\preprintfooter{Haskell for the cloud}   % 'preprint' option specified.
 
 %\renewcommand{\textfraction}{0.05}
-%\renewcommand{\topfraction}{0.95}
-%\renewcommand{\bottomfraction}{0.95}
-%\renewcommand{\floatpagefraction}{0.35}
+%\renewcommand{\topfraction}{0.9}
+%\renewcommand{\bottomfraction}{0.8}
+%\renewcommand{\floatpagefraction}{0.7}
 %\setcounter{totalnumber}{5}
 
 
@@ -281,6 +281,7 @@ While all of Haskell's primitive data types and most of the common higher-level 
 %\setlength{\parindent}{-3in}
 \begin{figure}[t!]
 \small
+\renewcommand{\baselinestretch}{0}
 \textbf{Basic messaging} 
 \begin{code}
 send   :: Serializable a => ProcessId -> a
@@ -317,7 +318,8 @@ matchUnknown :: ProcessM q -> MatchM q ()
 \begin{code}
 spawn :: NodeId -> Closure (ProcessM ()) 
       -> ProcessM ProcessId
-% call :: (Serializable a) => NodeId -> Closure (ProcessM a) -> ProcessM a
+call :: (Serializable a) => NodeId -> 
+        Closure (ProcessM a) -> ProcessM a
 terminate :: ProcessM a
 getSelfPid :: ProcessM ProcessId
 getSelfNode :: ProcessM NodeId
@@ -343,7 +345,7 @@ findPeerByRole :: PeerInfo -> String -> [NodeId]
 
  \textbf{Syntactic sugar}
 \begin{code}
-mkClosure     :: Name   -> Q Exp
+mkClosure :: Name   -> Q Exp
 remotable :: [Name] -> Q [Dec]
 \end{code}
 
@@ -352,7 +354,7 @@ remotable :: [Name] -> Q [Dec]
 say :: String -> ProcessM ()
 \end{code}
 
- \textbf{Type classes}
+ \textbf{Type class}
 \begin{code}
 class (Binary a,Typeable a) => Serializable a
 class Typeable a where typeOf :: a -> TypeRep
@@ -362,7 +364,7 @@ encode :: Binary a => a -> ByteString
 decode :: Binary a => ByteString -> a
   -- Defined in terms of get
 \end{code}
-\caption{The interface functions of Cloud Haskell%
+\caption{The interface functions of Cloud Haskell.%
 %: \label{fig:api}
 \label{fig:api}}
 \end{figure}
@@ -519,6 +521,38 @@ expect :: (Serializable a) => ProcessM a
 expect = receiveWait [match return]
 \end{code}
 
+Whether we use \textt{receiveWait} directly or \textt{expect}, we run the risk that the function will block until a certain type of message arrives. What if we want to check the incoming message queue, but not wait indefinitely? Erlang lets us do this with the \textt{receive...after} syntax:
+
+\begin{lstlisting}[language=Erlang,escapeinside={\%}{\^^M}]
+Pid ! {query, Stuff},
+receive
+  {response, Answer} ->
+    show_answer(Answer)
+after
+  50000 ->
+    show_error("Timeout!")
+end
+\end{lstlisting}
+
+This code will wait at most 50 seconds to receive a response to its query; after 50 seconds, it will stop waiting and display an error message. Our framework's corresponding function is \textt{receiveTimeout}, which is very similar to \textt{receiveWait}. Like \textt{receiveWait}, it takes a list of \textt{match}es, but it also takes a timeout value. If the timeout is exceeded, the function returns \textt{Nothing}.
+
+\begin{code}
+receiveTimeout :: Int -> [MatchM q ()] -> ProcessM (Maybe q)
+\end{code}
+
+Thus we can translate the Erlang example into Haskelll:
+
+\begin{code}
+do { send pid (Query stuff)
+   ; ret <- receiveTimeout 50000
+       [ match(\(Response answer) -> 
+            return answer)  ]
+   ; case res of
+       Nothing -> showError "Timeout!"
+       Just ans -> showAnswer ans
+\end{code}
+%\)
+
 \section{Messages through channels}
 In the previous subsection, we've shown how a message can be sent to a process. As you can see from the type of \textt{send}, any serializable data structure can be sent as a message to any process. Whether or not a particular message will be accepted (i.e., dequeued and acted upon) by the recipient process isn't determined until runtime. But what about Haskell's strong typing? Wouldn't it be nice to have some static guarantees that we are sending a message type to a receiver that knows how to deal with it?
 
@@ -551,29 +585,22 @@ ping2 pingout pongin =
       ; ping pingout pingin }
 \end{code}
 
+
 How do we start the exchange? Clearly we need to create two channels and call \textt{ping2} and \textt{pong2} (not shown, but substantially similar to \textt{ping2}) as new processes. 
 How do we start a new process?
 This requires sending a function to a remote node; in the general case, a function consists not only of code, but also of the bindings of the free variables of that code\,---\,its environment.
 This \pair{code}{environment} pair is called a closure.
 
+
+\apb{This doesn't fit here}
+
+\subsection{Combining ports}
+One can see an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive one message of known type. Where, then, is the analogous //!!
+
+
 \section{Closures}
 \label{Closures}
-\begin{comment}
-there's no way for a library to know what to transmit, or even if it's serializable. Clearly, we don't want to prevent remotely-invocable functions from ever using non-serializable data. That would mean that any function that could be started using \textt{spawn} wouldn't be allowed to use \textt{MVar}.
 
-all parameters to closure must be serializable
-
-I agree that all we need to do to represent deferred evaluation is a
-<fun,arg> tuple, and that's basically what a Closure is. We'll still
-serialize arbitrarily-sized environments, as long as they are
-converted explicitly to an argument, and that explicit control is an
-advantage. And, yes, the practical argument that implicitly
-serializing environments would be messy to implement is also valid.
-
-only local and global names are visible in a top-level function. This is a reasonable approximation because all toplevel names are always available on all hosts and never need to be transmitted
-
-prevention of sharing bad things (e.g. mvars, receiveports) is enforced by the serializer
-\end{comment}
 % ----------------------------------------------- BEGIN SIMON
 
 Any distributed implementation of a statically-typed, 
@@ -581,8 +608,8 @@ higher-order programming language must
 grapple with the fundamental question of \emph{how to transmit closures} from
 one node to another.  For example, consider:
 \begin{code}
-  sf :: SendPort (Int -> Int) -> Int -> ProcessM ()
-  sf p x = send p (\y -> x + y + 1)
+  sendFunc :: SendPort (Int -> Int) -> Int -> ProcessM ()
+  sendFunc p x = sendChan p (\y -> x+y+1)
 \end{code}
 \textt{sf} is a function that creates an anonymous function and sends it on port \textt{p}.   The function that it sends, \lstinline!(\y -> x + y + 1)!,
 is a closure that captures its free variables,
@@ -600,12 +627,13 @@ declaration
 One ``solution'' would be to say that functions are simply not
 serializable\,---\,but exactly the same issue arises with \textt{spawn}:
 \begin{code}
-newComputation = 
-  do { (s,r) <- newChan
-      ; spawn node (do { answer <- longComputation
-                  	   ; sendChan s answer })
-      ; receiveChan r }
+  nc :: ProcessM ()
+  nc = do { (s,r) <- newChan
+          ; spawn node (do { ...ans...
+                           ; sendChan s ans })
+          ; ... }
 \end{code}
+\je{I don't understand what you're trying to show with this example.}
 The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
 its free variables, \textt{s}.
 Thus, serializing this argument requires serializing a function with a free variable.
@@ -774,7 +802,7 @@ Existential because \textt{MkClosure}'s type is isomorphic
 to $\forall a. (\exists e. (e \to a) \times e) \to \text{\tt Closure}\;a$.
 }.
 \apb{How is this different from\\
-\textt{data Closure a = Closure (Static (e -> a))  e}
+\textt{data Closure a = Closure (Static (e -> a))   e}
 ?  If I wrote it that way, the problem would still be with us, would it not?   Have existentials really got anything to do with this?}
 Two different closures that have the same type may nonetheless capture environments
 that have differing types.  For example, consider the list of closures \textt{cs}:
@@ -843,13 +871,13 @@ expressed using closures:
 \begin{code}
   sf :: SendPort (Closure (Int -> Int)) 
      -> Int -> ProcessM ()
-  sf ch x = send ch clo
+  sf ch x = sendChan ch clo
     where
       clo  = MkClosure (static sfun) (encode x)
 
   sfun :: ByteString -> Int -> Int
   sfun = \bs -> let x = decode bs 
-             in \y -> x + y + 1)
+             in \y -> x + y + 1
 \end{code}
 The closure contains the pre-serialized environment \textt{encode x},
 and the static function \textt{sfun}. The latter deserializes its
@@ -911,7 +939,7 @@ As a running example, here is the code for \textt{sfun} using the workarounds:
 \begin{code}
   sf :: SendPort (Closure (Int -> Int)) 
      -> Int -> ProcessM ()
-  sf ch x = send ch ($(mkClosure 'add1) x)
+  sf ch x = sendChan ch ($(mkClosure 'add1) x)
 
   add1 :: Int -> Int -> Int
   add1 x y = x + y + 1
@@ -932,7 +960,7 @@ for the (quoted) name of the \textt{add1} function.
 The splice expands to a call to \textt{add1__closure}, 
 so the net result is just as if we had written
 \begin{code}
-  sf ch x = send ch (add1__closure x)
+  sf ch x = sendChan ch (add1__closure x)
 \end{code}
 What is \textt{add1__closure}?  It is a new top-level definition
 added by the Template Haskell splice \textt{$(remotable ['add1])}.
@@ -1255,7 +1283,7 @@ As a practical example, we present a complete, albeit trivial, example of a dist
 % maybe do fgrep example too? k-means
 HOW TO DEPLOY, SET UP CONFIG FILE, ETC
 
-\begin{code}
+\begin{lstlisting}[numbers=left,language=Haskell,escapeinside={--}{\^^M}]
 module Main where
 -- omitted: module imports
 data CounterMessage = CounterQuery ProcessId
@@ -1306,7 +1334,7 @@ go "WORKER" =
 
 main = runRemote (Just "config")
         [Main.__remoteTable] go
-\end{code}
+\end{lstlisting}
 % $
 
 When the program starts, it first calls Cloud Haskell's function \textt{remoteInit}, which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{remoteInit} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{remoteInit} in order to be able to invoke closures.
@@ -1374,10 +1402,10 @@ Implementing a framework for distributed computing in Haskell has been done befo
 % This is the text of the appendix, if you need one.
 
 \acks
-Thanks to Alan Mycroft for support and helpful feedback. 
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
+Great thanks go to Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
 
