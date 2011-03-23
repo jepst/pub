@@ -1291,19 +1291,47 @@ Erlang has a nice feature that allows program modules to be updated over the wir
 
 A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializing process.
 
-% \item syntax examples, comparison with Erlang: matchIf
-% deployment examples
-
 \section{Example}
-As a practical example, we present a complete, albeit trivial, example of a distributed application. The application provides a remote counter, which can be incremented and queried by a client process. This example mirrors a similar example Erlang, presented in ????
+As a practical example, we present a complete, albeit trivial, example of a distributed application. The application provides a remote counter, which can be incremented and queried by a client process. This example mirrors a similar example in Erlang, presented in ???? \je{what was the name of that book?}. We'll discuss every necessary step to actually get results from this example, including the configuration and deployment process.
 
-% maybe do fgrep example too? k-means
-HOW TO DEPLOY, SET UP CONFIG FILE, ETC
+Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle run several nodes of a distributed application on a single computer, the benefits of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which you'll deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \texttt{acs-01} \texttt{acs-02}.
 
-\begin{lstlisting}[numbers=left,language=Haskell,escapeinside={--}{\^^M}]
+The framework supports several configuration options, only a few of which are useful in the general case. These options can be set in a configuration file, which is loaded by the program, or on the command line of the program. Here, we'll describe how to create a suitable configuration file.
+
+The example application distinguishes two kinds of nodes: the {\em worker} node will initially wait passively for instruction, whereas the {\em master} node will find a worker node, spawn a thread on it, and use it to compute. Even though all nodes have to run the same program, their initial action is determined by this attribute, which we call their {\em role}. The role of a node is simply a string, which is part of the per-node configuration. This application looks for a configuration file named \texttt{config} in the current directory.
+
+We arbitrarily select the computer \texttt{acs-01} to host the master node, and the computer \texttt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
+
+\begin{lstlisting}
+cfgRole MASTER
+cfgHostName acs-01
+cfgKnownHosts acs-01 acs-02
+\end{lstlisting}
+
+And here is the configuration file for \textt{acs-02}:
+
+\begin{lstlisting}
+cfgRole WORKER
+cfgHostName acs-02
+cfgKnownHosts acs-01 acs-02
+\end{lstlisting}
+
+The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} option should match the name by which the host is accessible on the network. The \textt{cfgKnownHosts} option sets a list of hosts where nodes might be running. The \textt{getPeers} function uses the value of \textt{cfgKnownHosts} to contact any running nodes on each of the named machines. \textt{getPeers} will then return a \textt{PeerInfo}, which can be examined with \textt{findPeerByRole} to see what other nodes are available on the network.
+
+Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will try to query its value from the operating system. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to automatically discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications works in as many networks as possible, it's safer to explicitly set these values.
+
+\je{Should I talk about other, less useful configuration options?}
+
+Once the configuration file and binary executable have been distributed to both of the hosts, we can run the program. Because the master node expects that the worker node will already be available, we start the program on the worker node first.
+
+Here's the code for the example application:
+
+% maybe do fgrep example too? 
+
+\begin{lstlisting}[numbers=left,language=Haskell,escapeinside={\%}{\^^M}]
 module Main where
 -- omitted: module imports
-data CounterMessage = CounterQuery ProcessId
+data CounterMessage = CounterQuery ProcessId %\label{c_type}
                     | CounterShutdown
                     | CounterIncrement 
                     deriving (Typeable,Data)
@@ -1324,41 +1352,41 @@ counterLoop val
 
 $( remotable ['counterLoop] )
 
-increment :: ProcessId -> ProcessM ()
+increment :: ProcessId -> ProcessM () %\label{c_i}
 increment cpid = send cpid CounterIncremetn
 
-shutdown :: ProcessId -> ProcessM ()
+shutdown :: ProcessId -> ProcessM () %\label{c_t}
 shutdown cpid = send cpid CounterShutdown
 
-query :: ProcessId -> ProcessM Int
+query :: ProcessId -> ProcessM Int %\label{c_q}
 query counterpid =
   do { mypid <- getSelfPid
      ; send counterpid (CounterQuery mypid)
      ; receiveWait [match return] }
 
-go "MASTER" =
-  do { aNode <- liftM (head . flip 
+go "MASTER" = % \label{c_master}
+  do { aNode <- liftM (head . flip %\label{c_getpeer}
          findPeerByRole "WORKER") getPeers
      ; cpid <- spawn aNode ($(mkClosure 'counterLoop) 0)
-     ; increment cpid
-     ; increment cpid
-     ; newVal <- query cpid
+     ; increment cpid % \label{c_inc1}
+     ; increment cpid % \label{c_inc2}
+     ; newVal <- query cpid % \label{c_query}
      ; say (show newVal)   -- prints out 2
      ; shutdown cpid }
 
-go "WORKER" = 
+go "WORKER" = % \label{c_slave}
   receiveWait []
 
-main = runRemote (Just "config")
+main = runRemote (Just "config") %\label{c_init}
         [Main.__remoteTable] go
 \end{lstlisting}
 % $
 
-When the program starts, it first calls Cloud Haskell's function \textt{remoteInit}, which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{remoteInit} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{remoteInit} in order to be able to invoke closures.
+When the program starts, it first calls Cloud Haskell's \je{I am still not totally sold on this name} function \textt{runRemote} (line \ref{c_init}), which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{runRemote} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} in order to be able to invoke closures. These lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is split into two parts: one which will run on nodes designated as masters, and one which will run on nodes designated as workers. Whether a node is master or worker is determined by its role, which is set in the configuration file or by a command-line argument. In this application, all work is initiated by the master. The master starts by calling \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands to the counter and then queries the new value, which it outputs, before asking the process to shut itself down.
+The \textt{go} function is split into two parts: one, on line \ref{c_master}, which will run on the node designated as master, and one on line \ref{c_slave}, which will run on the node designated as worker. In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
-\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
+\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which is given on lines \ref{c_q}, \ref{c_i}, and \ref{c_t}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
 
 Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
 
