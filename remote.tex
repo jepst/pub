@@ -736,7 +736,7 @@ value, so it is entirely unclear \emph{how} to serialize them.
 To understand this problem more deeply, let's digress for a moment and consider the problem of specifying equality on lists.
 \begin{code}
   instance Eq a => Eq [a] where
-  	(x:xs)==(y:ys) = x==y && xs == ys
+  	(x:xs) == (y:ys) = x == y && xs == ys
 \end{code}
 This says that, provided that \textt{Eq a} holds, we can make \textt{Eq [a]} hold.
 \textt{Eq a} means that the equality operator \textt{==} is defined on values of type \textt{a}.  Analogously, \textt{Eq [a]} means that the equality operator is defined on values of type \textt{[a]}: indeed, the second line above defines it.
