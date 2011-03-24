@@ -42,7 +42,7 @@
 \DeclareGraphicsExtensions{.pdf, .png, .ps}   % NOT .jpg  because it throws away the detail.
 
 \newboolean{showcomments}
-\setboolean{showcomments}{true}
+\setboolean{showcomments}{false}
 \ifthenelse{\boolean{showcomments}}
   {\newcommand{\nb}[2]{
     \fbox{\bfseries\sffamily\scriptsize#1}
@@ -77,7 +77,7 @@
                {/=}{{$\neq$}}1
                {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
 %               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
-               {...}{{\textrm{ \ldots}}}1
+               {...}{{\textrm{\,\ldots}}}1
                {>>}{{$\gg$}}2 {>>=}{{$\gg=$}}2
                {|}{{$\mid$}}1               
     }
@@ -110,7 +110,7 @@
 \newcommand{\entails}{\vdash}
 \newcommand{\hash}{\texttt{\#}}
 \newcommand{\closed}[1]{\hash\,#1}
-\newcommand{\textt}[1]{\lstinline!#1!}
+\newcommand{\textt}[1]{\mbox{\lstinline!#1!}}
 \newcommand{\kmeans}{$k$-means}
 
 
@@ -136,7 +136,8 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. We believe that Cloud Haskell will let programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrency.
+We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
+Cloud Haskell has been implemented; we present example code and some preliminary performance measurements.
 
 \end{abstract}
 
@@ -154,7 +155,7 @@ We present Cloud Haskell, a domain-specific language for developing programs for
 \section{Introduction}
 
 Cloud Haskell is a domain-specific language for cloud computing, implemented as a shallow embedding in Haskell.
-It presents the programmer with a computational model strongly-based on the message-passing model of  Erlang, but with additional advantages that stem from Haskell's purity, types, and monads.  
+It presents the programmer with a computational model strongly based on the message-passing model of  Erlang, but with additional advantages that stem from Haskell's purity, types, and monads.  
 
 The message-passing model, popularized by \mbox{Erlang}\,\cite{Erlang93} for highly-reliable real-time applications and by MPI\,\cite{mpi99} for high-performance computing, stipulates that concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another are sent explicitly in messages.  
 We choose this model because it makes the costs of communication apparent, and because it makes a concurrent process a natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
@@ -181,25 +182,32 @@ Types in general, and monadic types in particular, help to guarantee properties 
 For example, a function that has an externally-visible effect such as sending or receiving a message \emph{cannot} have the same type as one that is pure.
 Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
-The contributions of this paper are:
-\vspace{-1ex}
+The contributions of this paper are as follows.
 \begin{itemize}
-\item A description of Cloud Haskell's interface functions. (Section \ref{s:processes}). Following the Erlang model, our language provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
-However, unlike Erlang, Cloud Haskell supports allows shared-memory concurrency \emph{within} one of its concurrent processes.
+\item A description of Cloud Haskell's interface functions (Sections \ref{s:ProcessesAndMessages} and \ref{s:matching}). Following Erlang, our language provides a system for exchanging messages between lightweight concurrent processes, regardless of whether they are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
+However, unlike Erlang, Cloud Haskell also allows shared-memory concurrency \emph{within} one of its processes.
 
-\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
+\item An additional message passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. We believe that this interface will play well with Haskell's emphasis on static types.
 
-\item A demonstration of the effectiveness of our approach in the form of an example application and performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Sections \ref{s:completeApp} and \ref{s:performance}). The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
+\item A method for serializing function closures that enables higher-order functions to be used in a distributed environment (Section~\ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
+
+\item A demonstration of the effectiveness of our approach in the form of an implementation (discussed in Sections~\ref{s:faking} and \ref{s:Implementation}), and a complete example application (Section~\ref{s:completeApp}).
+We also provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Section~\ref{s:performance}). 
 \end{itemize}
 \pagebreak
 
 \section{Processes and messages}
+%: \label{s:ProcessesAndMessages}
+\label{s:ProcessesAndMessages}
+
 We start with an overview of the basic elements of Cloud Haskell:
 processes, messages, what can be sent in a message and provision for failure.
 All of the elements of our DSL are listed in Figure~\ref{fig:api}.
+
 \subsection{Processes}
 %: \label{s:Processes}
 \label{s:processes}
+
 The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
 In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
@@ -207,7 +215,7 @@ We discuss this point further in Section~\ref{s:serialization}.
 
 \begin{figure}[t]
 \centerline {
-\includegraphics[width=\columnwidth]{threadsAndProcesses}
+\includegraphics[width=0.95\columnwidth]{threadsAndProcesses}
 }
 \caption{ 
 %: \label{fig:ProcessBubbles}
@@ -446,8 +454,7 @@ We discuss this at length in Section~\ref{s:closures}.
 %
 %This function accepts a location, given as a \textt{NodeId}, and an integer \textt{i}, and should remotely run the function \textt{fun}, which calculates the sum of integers $0 \ldots i$, and then prints out the result at the remote node. The list of integers $0 \ldots i$, named here \textt{nums}, is a free variable in \textt{fun}, but is not top-level. Furthermore, \textt{nums} depends on \textt{i}, which is also not top-level. Therefore, to be able to run \textt{fun} on a remote node, the local value of \textt{nums}, or at least \textt{i}, would need to be serialized and transmitted along with the representation of \textt{fun}.
 %
-%There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.
-%\apb{Isn't this a perfect job for Template Haskell?}
+%There are a few reasons why we don't want to automatically transmit the whole of \textt{fun}'s environment. The first reason is that it's hard to do without extending the language. In order to discover what names need to be included as part of a serializable environment, we would need to traverse \textt{fun}'s abstract syntax tree, picking up free variables along the way, and in turn the transitive closures of their free variables. Since our framework is implemented solely as a library, we'd prefer to avoid the compiler-hacking that would be necessary.%
 %
 %Another reason why implicit serialization of environment is bad is that it's easy for the programmer to lose track of what's being serialized. Since over-the-wire communication is potentially the greatest bottleneck in a distributed application, it's important that the programmer have direct control over what is transmitted. In the above code, for example, \textt{i} may be serialized, even though it isn't mentioned in \textt{fun}. To keep the quantity of serialized data under control, we prefer an explicit approach to environment serialization.
 %
@@ -540,7 +547,7 @@ data MathOp = Add ProcessId Double Double
             | DivByZero
 \end{code}
 
-There are several problems with using a sum type like \textt{MathOp}.
+There are several problems with using a sum type like \mbox{\textt{MathOp}.}
 Remember that \textt{expect} can select messages only by type.
 Thus, a process receiving \textt{MathOps} messages would need to be able to respond to all variants, even those that don't make sense: presumably, only client processes should receive \textt{Answer} and \textt{DivByZero} while only the calculating process should receive \textt{Add} and \textt{Divide}. 
 Moreover, putting all messages into a single sum type breaks modularity by exposing details of the calculating process to the client; when we add a new mathematical operation, every client will need to update its code, even if it doesn't use that operation.
@@ -1465,9 +1472,6 @@ The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} op
 
 Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will ask the operating system for it. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications runs on as many networks as possible, it is safer to explicitly set these values.
 
-%\je{Should I talk about other, less useful configuration options?}
-%\apb{no}
-
 Once the configuration file and binary executable have been distributed to both of the hosts, we can run the program. Because the master node expects that the worker node will already be available, we start the program on the worker node first.
 
 Here's the code for the example application:
@@ -1532,7 +1536,6 @@ main = runRemote (Just "config") %\label{c_init}
 % $
 
 When the program starts, it first calls Cloud Haskell's 
-%\je{I am still not totally sold on this name} 
 function \textt{runRemote} (line \ref{c_init}), which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}.
 Notice that \textt{runRemote} is given a list of function lookup tables, one for each module; these tables are generated by \textt{remotable}. 
 %Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
@@ -1652,11 +1655,10 @@ We hope that the task layer will provide functionality similar to well-known dis
 \acks
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
-$\sigma \nfn \tau$.  John Hughes helped us to understand details of Erlang, and we enjoyed 
-some design discussion with him about expressing Erlang computational model in Haskell. Koen Claessen
-insightfully pointed out the importance of not making receive ports serialisable.
-Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
-Jeff Epstein would like to thank Alan Mycroft for his support and helpful feedback. 
+$\sigma \nfn \tau$.  John Hughes helped us to understand some details of Erlang, and we enjoyed discussing with him how to express Erlang's computational model in Haskell. Koen Claessen
+insightfully pointed out the importance of not making receive ports serializable.
+Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical;
+Jeff Epstein thanks Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
 
