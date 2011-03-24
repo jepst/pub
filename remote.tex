@@ -136,7 +136,7 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
+We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
 Cloud Haskell has been implemented; we present example code and some preliminary performance measurements.
 
 \end{abstract}
@@ -210,7 +210,7 @@ All of the elements of our DSL are listed in Figure~\ref{fig:api}.
 
 The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable (see Section~\ref{s:serialization}).
+In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that makes this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable (see Section~\ref{s:serialization}).
 
 \begin{figure}[t]
 \centerline {
@@ -219,7 +219,7 @@ In most respects, Cloud Haskell follows Erlang by favoring message-passing as th
 \caption{ 
 %: \label{fig:ProcessBubbles}
 \label{fig:ProcessBubbles}
-Processes A and B do not share memory, even though they are running on the same physical processor, that is, the same node. Instead they communicate by sending messages, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \texttt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \texttt{ProcessM} monad; threads, in contrast, execute in the \texttt{IO} monad.
+Processes A and B do not share memory, even though they are running on the same physical processor, that is, the same node. Instead they communicate by sending messages, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \textt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \textt{ProcessM} monad; threads, in contrast, execute in the \textt{IO} monad.
 }
 \end{figure}
 
@@ -501,7 +501,7 @@ linkProcess    :: ProcessId -> ProcessM ()
 \end{code}
 
 \noindent
-\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process \texttt{a} will be notified by exception or by message.
+\lstinline!monitorProcess a b ma! establishes unidirectional process monitoring. That is, process \textt{a} will be notified if process \textt{b} terminates. The third argument determines whether the monitoring process \textt{a} will be notified by exception or by message.
 
 \textt{linkProcess} corresponds to Erlang's \textt{link}. It establishes bidirectional process monitoring between the current process and a given process; if either of those processes terminate abnormally, the other will receive an asynchronous exception. \textt{linkProcess} is defined in terms of \textt{monitorProcess}. 
 
@@ -797,7 +797,7 @@ However, making serializability built-in
 has multiple disadvantages:
 \begin{itemize}
 \item It relies on a single built-in notion of serializability.
-In contrast, the \texttt{Serializable} type class introduced in 
+In contrast, the \textt{Serializable} type class introduced in 
 Section~\ref{s:serialization} gives the programmer control over how
 values are serialized.  For example, a data structure might have
 redundant information cached in the nodes, which should be reconstructed
@@ -947,7 +947,7 @@ data Closure a where   -- Wrong
   MkClosure :: Static (env -> a) -> env -> Closure a
 \end{code}
 
-\textt{MkClosure} takes two arguments: a \texttt{Static} function and an environment of some (unknown) type \textt{env} that is appropriate as input to the function.
+\textt{MkClosure} takes two arguments: a \textt{Static} function and an environment of some (unknown) type \textt{env} that is appropriate as input to the function.
 The fact that the type of the environment is unknown (strictly, it is existentially quantified) means 
 that two closures with the same type may nonetheless capture environments
 with differing types.  For example, consider the list of closures \textt{cs}:
@@ -1143,7 +1143,7 @@ label of the function to call in the remote process.
 \end{code}
 We maintain a table in the \textt{ProcessM} monad that maps these strings
 to the appropriate implementation function composed with the environment deserializer, which in our example is
-\texttt{add1\_\_dec}.
+\textt{add1\_\_dec}.
 This table is initialised by the call to \textt{runRemote} that initialises the
 \textt{ProcessM} monad; the table may be consulted from within the monad:
 \begin{code}
@@ -1163,7 +1163,7 @@ Tiresomely, the programmer has the following obligations:
 \begin{itemize}
 \item In each module, write one call \textt{$(remotable [...])},
 passing the names of all of the functions provided as arguments to \textt{mkClosure}.
-\item In the call to \texttt{runRemote}, pass a list
+\item In the call to \textt{runRemote}, pass a list
 a list of all the \textt{\_\_remoteTable} definitions, imported from
 each module that has a call to \textt{remotable}.
 \end{itemize}
@@ -1448,7 +1448,7 @@ Cloud Haskell supports several configuration options, only a few of which are ne
 
 The example application distinguishes two kinds of nodes: the {\em worker} node will initially wait passively for instruction, whereas the {\em master} node will find a worker node, spawn a thread on it, and use it to compute. Even though all nodes have to run the same program, their initial action is determined by this attribute, which we call their {\em role}. The role of a node is simply a string, which is part of the per-node configuration. This application looks for a configuration file named \textt{config} in the current directory.
 
-We arbitrarily select the computer \texttt{acs-01} to host the master node, and the computer \texttt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
+We arbitrarily select the computer \textt{acs-01} to host the master node, and the computer \textt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
 
 \begin{lstlisting}
 cfgRole MASTER
