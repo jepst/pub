@@ -187,7 +187,7 @@ The contributions of this paper are as follows.
 \item A description of Cloud Haskell's interface functions (Sections \ref{s:ProcessesAndMessages} and \ref{s:matching}). Following Erlang, our language provides a system for exchanging messages between lightweight concurrent processes, regardless of whether they are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
 However, unlike Erlang, Cloud Haskell also allows shared-memory concurrency \emph{within} one of its processes.
 
-\item An additional message passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. We believe that this interface will play well with Haskell's emphasis on static types.
+\item An additional message-passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. We believe that this interface will play well with Haskell's emphasis on static types.
 
 \item A method for serializing function closures that enables higher-order functions to be used in a distributed environment (Section~\ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
 
@@ -852,12 +852,12 @@ It is helpful to remember this intuition: \emph{the defining property of
 a value of type \emph{\textt{(Static} $\tau$)} is that it can be serialized},
 and moreover, that it can be serialized without knowledge of how to serialize $\tau$.
 Operationally, the implementation serializes a \textt{Static} value by first evaluating it,
-and then serializing the code label in the result of the evaluation\footnote{
-Sending a code label is ok for functions, but what about data values of type, say, \textt{Static Tree}?
-For these we simply statically allocate the \textt{Tree} value and pass the label of its root.
-In fact, we do the same for functions, passing the label of its 
-statically-allocated closure object (which in turn points to its code).
-}.  
+and then serializing the code label in the result of the evaluation.
+Perhaps surprisingly, this works not only for functions, but also for data values of a type like \textt{Static Tree}.
+For these we simply statically allocate the \textt{Tree} value (at compile time), and pass the label of its root.
+%In fact, we do the same for functions, passing the label of its 
+%statically-allocated closure object (which in turn points to its code).
+  
 
 \begin{figure}[t!]
 \begin{minipage}{\linewidth}
@@ -1027,7 +1027,7 @@ expressed using closures:
   sfun = \bs -> let x = decode bs 
                 in \y -> x + y + 1
 \end{code}
-The type of the items that can be sent on port \textt{p} is now \textt{(Closure (Int -> Int))}, instead of just \textt{(Int -> Int)}.
+The type of the items that can be sent on port \textt{p} is now \lstinline+(Closure+ \lstinline+(Int -> Int))+, instead of just \textt{(Int -> Int)}.
 Instead of just sending a lambda-expression on \textt{p}, we send \textt{clo}, a
 closure containing the pre-serialized environment \textt{encode x},
 and the static function \textt{sfun}. The latter deserializes its
@@ -1417,7 +1417,7 @@ a little less convenient for the programmer:
 \section{Implementation}
 %: \label{s:Implementation}
 \label{s:Implementation}
-Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compiler (GHC). 
+Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compiler (GHC). The code is evolving rapidly; a current snapshot is available at \url{http://www.github.com/jepst/CloudHaskell}. 
 Some features of the implementation are:
 
 \begin{itemize}
@@ -1563,6 +1563,7 @@ Because \kmeans{} is computationally demanding, data intensive, and can be parti
 \centerline {
  \includegraphics[width=\columnwidth]{ec2_cropped}
 }
+\vspace{0.5ex}
 \caption{ 
 \label{fig:performance1}
 The run-time of the \kmeans{} algorithm in Cloud Haskell. The input data was one million 100-dimensional data points; we used one reducer nodes for all tests. % Performance improves at a better than linear rate as we increase the number of mapper nodes.
