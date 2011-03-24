@@ -136,7 +136,8 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. We believe that Cloud Haskell will let programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrency.
+We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
+Cloud Haskell has been implemented; we present example code and some preliminary performance measurements.
 
 \end{abstract}
 
@@ -182,24 +183,31 @@ For example, a function that has an externally-visible effect such as sending or
 Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
 The contributions of this paper are:
-\vspace{-1ex}
 \begin{itemize}
-\item A description of Cloud Haskell's interface functions. (Section \ref{s:processes}). Following the Erlang model, our language provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
-However, unlike Erlang, Cloud Haskell supports allows shared-memory concurrency \emph{within} one of its concurrent processes.
+\item A description of Cloud Haskell's interface functions (Sections \ref{s:ProcessesAndMessages} and \ref{s:matching}). Following Erlang, our language provides a system for exchanging messages between lightweight concurrent processes, regardless of whether they are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
+However, unlike Erlang, Cloud Haskell also allows shared-memory concurrency \emph{within} one of its processes.
 
-\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
+\item An additional message passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. We believe that this interface will play well with Haskell's emphasis on static types.
 
-\item A demonstration of the effectiveness of our approach in the form of an example application and performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Sections \ref{s:completeApp} and \ref{s:performance}). The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
+\item A method for serializing function closures that enables higher-order functions to be used in a distributed environment (Section~\ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
+
+\item A demonstration of the effectiveness of our approach in the form of an implementation (discussed in Sections~\ref{s:faking} and \ref{s:Implementation}), and a complete example application (Section~\ref{s:completeApp}).
+We also provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Section~\ref{s:performance}). 
 \end{itemize}
 \pagebreak
 
 \section{Processes and messages}
+%: \label{s:ProcessesAndMessages}
+\label{s:ProcessesAndMessages}
+
 We start with an overview of the basic elements of Cloud Haskell:
 processes, messages, what can be sent in a message and provision for failure.
 All of the elements of our DSL are listed in Figure~\ref{fig:api}.
+
 \subsection{Processes}
 %: \label{s:Processes}
 \label{s:processes}
+
 The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
 In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
