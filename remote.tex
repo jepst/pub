@@ -210,8 +210,7 @@ All of the elements of our DSL are listed in Figure~\ref{fig:api}.
 
 The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
-We discuss this point further in Section~\ref{s:serialization}.
+In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable (see Section~\ref{s:serialization}).
 
 \begin{figure}[t]
 \centerline {
@@ -436,7 +435,7 @@ spawn :: NodeId -> Closure (ProcessM ())
 \noindent
 The difference between this and our initial guess is that the second argument to \textt{spawn} is \textt{Closure (ProcessM ())} rather than just \textt{ProcessM ()}.
 Serializing a function means serializing two things: a representation of its code, and a representation of its environment\,---\,more precisely, the bindings of its free names.
-A \textt{Closure} is exactly this, but the details of closures turn out to be surprisingly tricky, and working through them is one of the main contributions of Cloud Haskell.
+A \textt{Closure} is exactly this, but the details of closures turn out to be surprisingly tricky.
 We discuss this at length in Section~\ref{s:closures}.
 \label{s:closureForeshadow}
 
@@ -486,7 +485,7 @@ Fault tolerance in Cloud Haskell is based on ideas from Erlang.
 %
 The premise of Erlang-style fault tolerance is that, when something goes deeply wrong inside a process, the best course of action is for the process to terminate; attempting to glue the pieces back together with string and sealing wax will not lead to robustness.   Instead, another process should take over.  
 To make this possible, one process can monitor another process; if the monitored process terminates, the monitoring process will be notified. 
-Ascertaining the origin of the failure and recovering from it are left to the application or a higher-level framework, such as the Task framework briefly discussed in Section~\ref{s:futureWork}.
+Ascertaining the origin of the failure and recovering from it are left to the application or a higher-level framework.
 
 A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving the terminating process.
 Examples of such faults are uncaught exceptions, and node on which the process is running becoming inaccessible. 
@@ -690,8 +689,7 @@ This decision reflects our intended execution environment, in which we expect ch
 The ability, offered by Mach, to move a receive port from one place to another can be very useful for moving responsibility for a service from one provider to another, but only if this can be done without the risk of losing messages that are in transit.  
 This is easy inside an operating system like Mach, but much less so in a distributed environment, especially when one of the prime reasons for moving a service to a new server is that the old server has crashed.  
 
-We can now reformulate our ping example to use typed channels. The \textt{ping} process must be given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each \textt{Ping} and \textt{Pong} message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and the \textt{Pong} message contains the send port of a channel of pings.
-
+We can now reformulate our ping example to use typed channels. The \textt{ping} process is given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and vice-versa.
 % this might not be the best example, really
 \begin{code}
 ping2 :: SendPort Ping -> ReceivePort Pong -> ProcessM ()
@@ -705,8 +703,7 @@ ping2 pingout pongin =
 
 \subsection{Combining ports}
 There is an analogy between the \textt{expect} function and its channel-based counterpart, \textt{receiveChan}: both receive a message of a particular type. 
-What, then, would be the channel-based counterpart of \textt{receiveWait}\,---\,a function that lets us receive a message from one of several channels?
-We provide this functionality through the \textt{mergePorts} family of functions.
+The channel-based counterpart of \textt{receiveWait} is the \textt{mergePorts} family of functions, which let us receive a message from one of several channels.
 
 \begin{code}
 mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
@@ -715,7 +712,7 @@ mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
 
 Given a list of \textt{ReceivePort}s of the same message type, these functions will return a new \textt{ReceivePort} that, when read with \textt{receiveChan}, will provide a message taken from one of the input \textt{ReceivePort}s. You can visualize that the \textt{mergePorts} functions take several ``feeder'' ports and squeeze them together into a ``merged'' port. Even after producing the merged \textt{ReceivePort}, the original ports may continue to be used independently. Messages read from the merged port are extracted from the queue of the feeder port, and so it is impossible to receive the same message twice.
 
-\textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports strictly in the order that they were provided to \textt{mergePortsBiased}\,---\,in other words, the port is ``biased'' towards the first feeder port. 
+\textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports in the order that they were provided to \textt{mergePortsBiased}\,---\,so the port is ``biased'' towards the first feeder port. 
 So, if the first feeder port always has a message waiting, it could starve the other ports.
 
 If this biased behavior is undesirable, use \textt{mergePortsRR} instead. The port created by \textt{mergePortsRR} will rotate the order in which the feeder ports are queried with each subsequent read. The effect is a fairer ``round-robin'' multiplexing, which will guarantee that, given enough reads on the merged port, every feeder port will eventually have a chance to contribute a message from its queue.
@@ -1555,9 +1552,9 @@ Notice that it is not necessary to do any explicit thread synchronization in thi
 
 One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points and an integer $k$, and its output is an assignment of each point to one of $k$ clusters.
 
-The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
+The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}; the data points are divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-Because \kmeans{} is computationally demanding, data intensive, and can be partitioned easily,  it provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm using our framework and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+\kmeans{} is computationally demanding, data intensive, and easilly partitioned, and so provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
