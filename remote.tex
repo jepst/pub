@@ -153,33 +153,29 @@ We present Cloud Haskell, a domain-specific language for developing programs for
 %
 \section{Introduction}
 
-With the age of steadily-improving processor performance behind us, we must learn to compute with more, rather than faster, processors. 
-A \emph{cloud} is data center that makes available a large number of processors for storing and processing users' data; we'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
+Cloud Haskell is a domain-specific language for cloud computing, implemented as a shallow embedding in Haskell.
+It presents the programmer with a computational model strongly-based on the message-passing model of  Erlang, but with additional advantages that stem from Haskell's purity, types, and monads.  
 
-How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using shared-memory concurrency primitives, such as locks and transactions. 
-%We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
-%\spj{Not a strong argument.  Message passing is always available for shared memory machines and people don't use it much.  It's just
-%too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
-%For example, 
-%$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
-Although possible, we don't believe this to be the best way forward.
-To be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs, in both energy and time, is data movement.
+The message-passing model, popularized by \mbox{Erlang}\,\cite{Erlang93} for highly-reliable real-time applications and by MPI\,\cite{mpi99} for high-performance computing, stipulates that concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another are sent explicitly in messages.  
+We choose this model because it makes the costs of communication apparent, and because it makes a concurrent process a natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
+%Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into another processor's memory.
+
+We use the term ``cloud'' to mean a large number of processors with separate memories that are connected by a network and have independent failure modes.
+We don't believe that shared-memory concurrency is appropriate for programming the cloud.
+This is because an effective programming model must be accompanied by a cost model.
+In a distributed memory system, the most significant cost, in both energy and time, is data movement.
 A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
-Synchronization is another major cost; while shared memory makes some synchronization explicit (locks, compare and swap), the synchronization implicit in the simulation of the memory itself, and in higher-level abstractions such as transactions, remains implicit.
 
-Instead, we turn to a solution popularized by \mbox{Erlang}\,\cite{Erlang93} and MPI\,\cite{mpi99}: {\em message passing}. The message-passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another are explicitly sent in {\em messages}.  This make the costs of communication apparent.
-It also means that a concurrent process is natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
-%Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into memory.
-
-Failure is, in many ways, \emph{the} defining issue of distributed computation.  In a network of hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
+In many ways, failure is \emph{the} defining issue of distributed computation.  
+In a network of hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
 A programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang has a solution that has stood the test of time; 
 %the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We 
 we don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
 
-Cloud Haskell is a domain-specific language for cloud computing, implemented as a shallow embedding in Haskell.
-It presents the programmer with a computational model  similar to Erlang's, but with additional advantages that stem from Haskell's purity, types, and monads.  
-As a pure functional language, data is by default immutable, so shared, mutable data won't be missed.  
-More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. 
+If Erlang has been so successful, you may wonder what Haskell brings to the table. 
+The short answer is: purity, types, and monads. 
+As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed. 
+Importantly, immutability allows the implementation decide whether to share or copy the data: the choice is semantically invisible, and so can depend on the locations of the processes. 
 Moreover, pure functions are idempotent; this means that functions running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
 Types in general, and monadic types in particular, help to guarantee properties of programs statically.  
 For example, a function that has an externally-visible effect such as sending or receiving a message \emph{cannot} have the same type as one that is pure.
