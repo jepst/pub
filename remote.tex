@@ -535,7 +535,7 @@ How can we provide similar functionality in Haskell?
 
 Haskell doesn't have an atom data type, but an idiomatic way of representing the different messages is to use type constructors. Imagine that a process should be able to perform mathematical operations remotely, and should be able to respond to two requests: \textt{Add pid a b}, and \textt{Divide pid num den}. 
 The response should be to send back either a value \textt{Answer Double}, or a \textt{DivByZero} error message.
-It's certainly possible to create a message type that represents the sum of all of these variants, suitable for use with \textt{expect}:
+It is certainly possible to create a message type that represents the sum of all of these variants, suitable for use with \textt{expect}:
 
 \begin{code}
 data MathOp = Add ProcessId Double Double
@@ -550,7 +550,7 @@ Thus, a process receiving \textt{MathOps} messages would need to be able to resp
 Moreover, putting all messages into a single sum type breaks modularity by exposing details of the calculating process to the client; when we add a new mathematical operation, every client will need to update its code, even if it doesn't use that operation.
 Worse, a single process that offers more than one service could not keep them separate; clients of either would be forced to see the interface of both.
 
-To avoid this kind of false dependency between what ought to be independent modules, it's better to break the single \textt{MathOp} type into several types, each of which can be handled separately. 
+To avoid this kind of false dependency between what ought to be independent modules, it is better to break the single \textt{MathOp} type into several types, each of which can be handled separately. 
 We can imagine three types of messages:
 
 \begin{code}
@@ -710,7 +710,7 @@ mergePortsBiased :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a
 mergePortsRR :: Serializable a => [ReceivePort a] -> ProcessM (ReceivePort a)
 \end{code}
 
-Given a list of \textt{ReceivePort}s of the same message type, these functions will return a new \textt{ReceivePort} that, when read with \textt{receiveChan}, will provide a message taken from one of the input \textt{ReceivePort}s. You can visualize that the \textt{mergePorts} functions take several ``feeder'' ports and squeeze them together into a ``merged'' port. Even after producing the merged \textt{ReceivePort}, the original ports may continue to be used independently. Messages read from the merged port are extracted from the queue of the feeder port, and so it's impossible to receive the same message twice.
+Given a list of \textt{ReceivePort}s of the same message type, these functions will return a new \textt{ReceivePort} that, when read with \textt{receiveChan}, will provide a message taken from one of the input \textt{ReceivePort}s. You can visualize that the \textt{mergePorts} functions take several ``feeder'' ports and squeeze them together into a ``merged'' port. Even after producing the merged \textt{ReceivePort}, the original ports may continue to be used independently. Messages read from the merged port are extracted from the queue of the feeder port, and so it is impossible to receive the same message twice.
 
 \textt{mergePortsBiased} and \textt{mergePortsRR} differ in the order that the input ports are queried, which is significant in the case that more than one port has a message waiting. Each subsequent read from the port created by \textt{mergePortsBiased} will query the feeder ports strictly in the order that they were provided to \textt{mergePortsBiased}\,---\,in other words, the port is ``biased'' towards the first feeder port. 
 So, if the first feeder port always has a message waiting, it could starve the other ports.
@@ -722,7 +722,7 @@ Cloud Haskell also provides a family of \textt{combinePorts} functions that can 
 \section{Closures}
 %: \label{s:closures}
 \label{s:closures}
-\apb{We agreed to move this to between Sections~\ref{s:processes} and \ref{s:matching}.  I tried that; the problem that the first example uses Channels, which aren't introduced until Section~\ref{s:Channels}.  If I re-write the example with ProcessIds, then there is nothing for the environment to capture, and it doesn't make our point.  We could make another example, but we didn't like the \textt{printSum} example.  So I left this section in it's original place.  I think that the flow is OK; the problem is that something we identify as a major contribution comes a bit late. \vspace{2ex}}
+\apb{We agreed to move this to between Sections~\ref{s:processes} and \ref{s:matching}.  I tried that; the problem that the first example uses Channels, which aren't introduced until Section~\ref{s:Channels}.  If I re-write the example with ProcessIds, then there is nothing for the environment to capture, and it doesn't make our point.  We could make another example, but we didn't like the \textt{printSum} example.  So I left this section in its original place.  I think that the flow is OK; the problem is that something we identify as a major contribution comes a bit late. \vspace{2ex}}
 
 \noindent
 As we hinted in Section~\ref{s:closureForeshadow}, 
@@ -735,7 +735,7 @@ To see how pervasive this question is, consider \textt{sendFunc}, which creates 
 sendFunc :: SendPort (Int->Int) -> Int -> ProcessM ()
 sendFunc p x = sendChan p (\y -> x + y + 1)
 \end{code}
-Notice that the function sent on the channel, \lstinline!(\y -> x + y + 1)!,
+Notice that the function sent on the channel, \lstinline!(\y -> x+y+1)!,
 is a closure that captures its free variables,
 in this case \textt{x}. 
 In general, to serialize a function value requires that one must also serialize its free variables.
@@ -762,7 +762,7 @@ We would like to write something like:
 but that can't be expressed, and for good reason:  serializability of a function is not a structural property of the function, because Haskell's view of a function is purely extensional.  
 In other words, all we can do with a function is apply it; we can't introspect on its internal structure
 
-It's not acceptable to say that functions are simply not
+It is not acceptable to say that functions are simply not
 serializable, because any implementation of \textt{spawn} needs to be able to specify what function to run on the remote node.
 For example, consider the task of creating a new remote worker process:
 \needspace{7ex}
@@ -791,10 +791,9 @@ allows one to serialize \emph{any value at all}, and transports it to the
 other end of the wire.  
 Now, function closures can be serialized by
 serializing their free variables, and adding a representation of their code.
-This approach is used by Glasgow Distributed Haskell \cite{gdh2001} and
-many other higher-order distributed languages (see Section~\ref{s:related}).
-
-Making serializability built-in
+This approach is used by every other 
+higher-order distributed language that we know of (see Section~\ref{s:related}).
+However, making serializability built-in
 has multiple disadvantages:
 \begin{itemize}
 \item It relies on a single built-in notion of serializability.
@@ -813,29 +812,29 @@ do not span processes.
 \item Serializing a value and sending it over the network has an important
 effect on the cost model; it should not be invisible.
 \end{itemize}
-
+\noindent
 In the object-oriented world, Java RMI~\cite{javarmi} also builds-in a lot of serialization machinery.  
 Java RMI requires the programmer to specify which objects are serializable (by declaring that they implement the interface \textt{Serializable}), but the programer is not required to actually write the methods that serialize the fields of the object: that is taken care of by the language implementation itself.
 However, Java RMI also uses introspection to provide the programmer with fine control over
 which fields are serialized (the \textt{transient} flag prevents serialization), and exactly how the data are encoded (by providing the private methods \textt{writeObject} and \textt{readObject}); it also allows the programmer to take control of the whole serialization process by implementing the \textt{Externalizable} interface, which means implementing the \textt{writeExternal} and \textt{readExternal} methods by hand. 
 As a consequence, Java RMI avoids the three disadvantages listed above, while still automating serialization for simple data objects.
 
-\apb{Simon, I believe that you changed the next paragraph, but perhaps you forgot to push the changes?}
-
-Without reflection, these options are not open to us.  
-Building-in serializability of every value is
-too big a primitive.  We do need \emph{some} built-in support, but
+For deserialisation, however, the Java approach depends crucially on the \emph{runtime} ability
+to take an arbitrary type representation and cough up a deserialiser for that type.
+Haskell lacks this ability so this option is not open to us.
+Yet, as we argue above, building-in serializability of every value is
+too blunt an instrument.  We do need \emph{some} built-in support, but
 we seek something more more modest.  Proposing such a mechanism for a language without reflection is one of 
 the main contributions of this paper.
 
 \subsection{Static values}
 
-We begin with a simple observation: some functions can be readily
+We begin with a simple observation: \emph{some} functions can be readily
 transmitted to the other end of the wire, namely, functions that have no
 free variables.  For the present we make the simplifying assumption that every node is running the same code.  (We return to the question
 of code that varies between nodes in Section~\ref{s:code-update}.)
 Under this assumption, a closure without free variables can be
-readily serialized as a single symbolic code address, also called a linker label.
+readily serialized as a single symbolic code address (aka linker label).
 
 \lstset{mathescape=true}
 
@@ -848,17 +847,21 @@ enjoying a built-in serialization instance:
 \end{code}
 It is helpful to remember this intuition: \emph{the defining property of
 a value of type \emph{\textt{(Static} $\tau$)} is that it can be serialized},
-moreover, that it can be serialized without knowledge of how to serialize $\tau$.
+and moreover, that it can be serialized without knowledge of how to serialize $\tau$.
 Operationally, the implementation serializes a \textt{Static} value by first evaluating it,
-and then serializing the code label in the result of the evaluation.  
-\apb{This makes sense to me if $\tau$ is \textt{a -> b}, but not when $\tau$ is \textt{Int} or \textt{Tree Int}.}
+and then serializing the code label in the result of the evaluation\footnote{
+Sending a code label is ok for functions, but what about data values of type, say, \textt{Static Tree}?
+For these we simply statically allocate the \textt{Tree} value and pass the label of its root.
+In fact, we do the same for functions, passing the label of its 
+statically-allocated closure object (which in turn points to its code).
+}.  
 
 \begin{figure}[t!]
 \begin{minipage}{\linewidth}
 $$
 \begin{array}{rcl}
 \Gamma & ::= & \overline{x :_{\delta} \sigma} \\[1ex]
-     \delta & ::= & \mbox{{\sf S}} | \mbox{{\sf D}}
+     \delta & ::= & \mbox{{\sf S}} ~|~ \mbox{{\sf D}}
 \end{array}
 $$
 \begin{align*}
@@ -866,13 +869,13 @@ $$
 \end{align*}
 
 \begin{equation*}
-\tag{Static~intro.}\label{StaticIntro}
+\tag{Static~intro}\label{StaticIntro}
 \frac{\Gamma\downarrow~\entails e : \tau}
      {\Gamma \entails \textsf{static}~e : \textsf{Static}~\tau}
 \end{equation*}
 
 \begin{equation*}
-\tag{Static~elim.}\label{StaticElim}
+\tag{Static~elim}\label{StaticElim}
 \frac{\Gamma \entails e : \textsf{Static}~\tau}
      {\Gamma \entails \textsf{unstatic}~e : \tau}
 \end{equation*}
@@ -893,15 +896,13 @@ bindings and for terms; we omit the details.)
 The postfix operation $\downarrow$ filters a type environment
 to leave only the
 \textsf{S} bindings.
-The rule \ref{StaticIntro} states that a term \textt{static $\;e$} is well typed iff all of $e$'s free variables are flagged \textsf{S}, for only then will we be able to show that $e : \tau$ in the filtered environment $\Gamma \downarrow$.
-
-Although simple, these rules embody the following key ideas:
+The rule (\ref{StaticIntro}) states that a term \textt{static $\;e$} is well typed iff all of $e$'s free variables are flagged \textsf{S}, for only then will we be able to show that $e : \tau$ in the filtered environment $\Gamma \downarrow$.  In short:
 \begin{itemize}
 \item A \emph{variable} is \textsf{S}-bound iff it is bound at the top level.
 \item A \emph{term} ($\!$\textt{static $\;e$}) has type ($\!$\textt{Static $\;\tau$}) iff 
 $e$ has type $\tau$, and all of $e$'s free-variables are \textsf{S}-bound.  
 \end{itemize}
-They have some interesting consequences:
+Although simple, these rules have some interesting consequences:
 \begin{itemize}
 \item A variable with an \textsf{S} binding may have a non-\textt{Static} type. Consider the 
 top-level binding for the identity function:
@@ -910,7 +911,8 @@ top-level binding for the identity function:
   id x = x
 \end{code}
 Because the function \textt{id} is top-level, its binding
-in $\Gamma$ will have $\delta=\textsf{S}$, in other words \textt{id} $:_{\textsf{S}}$ \textt{a->a}. However, ($\!$\textt{Static id}) has type ($\!$\textt{Static (a -> a)}).
+in $\Gamma$ will have $\delta=\textsf{S}$, in other words \textt{id} has the
+non-\textt{Static} type \textt{id} $:_{\textsf{S}}$ \textt{a->a}. However, ($\!$\textt{Static id}) has type ($\!$\textt{Static (a -> a)}).
 
 \item A variable with a \textsf{D} binding may have a \textt{Static} type.  For example
 \begin{code}
@@ -978,7 +980,7 @@ that, at the receiving end, we do not know the type captured inside
 the closure, so we do not know whch deserializer to use.  This initially
 appears to be a very awkward problem indeed. Maybe we have to send a 
 representation of the environment type, and do a run-time type-class lookup
-at the receiving end?  This solution is used by Clean \cite{clean}.  Maybe
+at the receiving end?  Maybe
 we could send some representation of the deserialization function itself?
 But that seems to require a solution to the problem of serializing 
 closures, so an infinite regress beckons.
@@ -1035,12 +1037,12 @@ Using closures we would rewrite it like this:
   newWorker = do { (s,r) <- newChan
                  ; spawn node clo
                  ; ... }
-    where clo = (MkClosure (static child) (encode s))
+    where clo = MkClosure (static child) (encode s)
 
   child :: ByteString -> ProcessM ()
   child = \bs -> let s = decode bs
            		   in do { ans <- ...
-               		     ; sendChan s ans })
+               		     ; sendChan s ans }
 \end{code}
 The type of \textt{spawn} is given in Figure~\ref{fig:api}; it takes
 a closure as its second argument.
@@ -1160,7 +1162,7 @@ process crashes, consistent with Erlang's philosophy of crash-and-recover.
 Tiresomely, the programmer has the following obligations:
 \begin{itemize}
 \item In each module, write one call \textt{$(remotable [...])},
-passing as the list argument the names of all of the functions provided as arguments to \textt{mkClosure}.
+passing the names of all of the functions provided as arguments to \textt{mkClosure}.
 \item In the call to \texttt{runRemote}, pass a list
 a list of all the \textt{\_\_remoteTable} definitions, imported from
 each module that has a call to \textt{remotable}.
@@ -1412,9 +1414,8 @@ a little less convenient for the programmer:
 \section{Implementation}
 %: \label{s:Implementation}
 \label{s:Implementation}
-Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compiler (GHC). Since it uses some advanced features of GHC that aren't yet available in other compilers, we expect to support only GHC for the near future.
-
-Some of the features used in the framework include:
+Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compiler (GHC). 
+Some features of the implementation are:
 
 \begin{itemize}
 \item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; 
@@ -1431,7 +1432,8 @@ Haskell's Software Transactional Memory (\textt{STM}) helps us solve this proble
 
 Erlang has a nice feature that allows program modules to be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without having to restart the application. We decided not to go in this direction with our framework, partly because code update is a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, whereas Erlang's bytecode interpreter retains more control over the loading and execution of programs.
 
-Because we have not implemented dynamic code update, Cloud Haskell code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes on the programmer the responsibility to ensure that all hosts are running the same version of the compiled executable.  Because \textt{TypeRep}s are nominal, and because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that use the same name to refer to message types with different structure would most probably crash the deserializing process.
+Because we have not implemented dynamic code update, Cloud Haskell code needs to be distributed to remote hosts ``out of band''. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes on the programmer the responsibility to ensure that all hosts are running the same version of the compiled executable.  Because \textt{TypeRep}s are nominal, and because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that use the same name to refer to message types with different structure would most probably crash the deserializing process.  A simple solution is to include with a \textt{TypeRep} a fingerprint of the complete type definition and everything it depends on.  GHC already computes such fingerprints as part of its recompilation checking, so it should not be hard to incorporate fingerprints in a \textt{TypeRep}.
+
 
 \section{A complete Cloud Haskell Application}
 %: \label{s:completeApp}
@@ -1465,7 +1467,7 @@ cfgKnownHosts acs-01 acs-02
 
 The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} option should match the name by which the host is accessible on the network. The \textt{cfgKnownHosts} option sets a list of hosts where nodes might be running. The \textt{getPeers} function uses the value of \textt{cfgKnownHosts} to contact any running nodes on each of the named machines. \textt{getPeers} will then return a \textt{PeerInfo}, which can be examined with \textt{findPeerByRole} to see what other nodes are available on the network.
 
-Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will ask the operating system for it. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications runs on as many networks as possible, it's safer to explicitly set these values.
+Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will ask the operating system for it. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications runs on as many networks as possible, it is safer to explicitly set these values.
 
 %\je{Should I talk about other, less useful configuration options?}
 %\apb{no}
@@ -1546,17 +1548,17 @@ In this application, all work is initiated by the master. On line \ref{c_getpeer
 \textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
 The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which are given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
 
-Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
+Notice that it is not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it is impossible to create a race condition on the counter.
 
 \section{Performance}
 %: \label{s:performance}
 \label{s:performance}
 
-One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points, and its output is an assignment of each data point to one of $k$ clusters.
+One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points and an integer $k$, and its output is an assignment of each point to one of $k$ clusters.
 
-The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its assigned data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The assignments are collected by the reducer nodes and are used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm until either the centroids stop changing or the maximum number of iterations is reached.
+The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-Because \kmeans{} is computationally demanding, data intensive, and can be easily partitioned into compute units, we feel that it is an ideal test case for Cloud Haskell. We implemented the \kmeans{} algorithm on top of our framework and deployed it to an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \texttt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of \kmeans{} iterations to five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+Because \kmeans{} is computationally demanding, data intensive, and can be partitioned easily,  it provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm using our framework and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
@@ -1564,15 +1566,22 @@ Because \kmeans{} is computationally demanding, data intensive, and can be easil
 }
 \caption{ 
 \label{fig:performance1}
-The performance of the \kmeans{} algorithm as implemented in Cloud Haskell. The input data set was one million 100-dimensional data points. The number of reducer nodes was fixed at 1 for all tests. Performance improves at a better than linear rate as we increase the number of mapper nodes.
+The run-time of the \kmeans{} algorithm in Cloud Haskell. The input data was one million 100-dimensional data points; we used one reducer nodes for all tests. % Performance improves at a better than linear rate as we increase the number of mapper nodes.
 }
 \end{figure}
 
-The performance of \kmeans{} under Cloud Haskell does not compare favorably with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
+The performance of \kmeans{} under our prototype implementation Cloud Haskell does not yet compare favorably 
+\apb{say how bad!} with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
+\apb{Say we just got it running and have not optimized anything.}
 
 % Isis/Paxos/virtual synchrony consensus?
 
 \section{Related work} \label{s:related}
+
+As should be clear, our main inspiration comes from Erlang \cite{Erlang93}, whose tremendous
+success for distributed programming led us to emulate its best features.
+A second inspiration is the Ciel execution engine and Skywriting language
+of Murray \emph{et al} \cite{Murray2010, Murray2011}.
 
 In scientific computing, the most scalable solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is language-independent; interfaces are available for Fortran, C, and C++, and an array of different implementations have been optimized for a variety of supercomputer architectures.  In comparison, Cloud Haskell, as a DSL embedded in Haskell, is not easily available from other languages.
 This is of course a weakness, but it is also a great strength.  
@@ -1610,15 +1619,24 @@ programming, including serialization of function values.  Like Actue
 it uses explicit type passing, the details of how the free variables
 of function closures are marshalled are hazy.  Rossberg's language
 Alice likewise supports type-safe distributed programming
-\cite{rossberg:alice}.  Again, functions closures may be serialised,
-but that is regarded as a built-in service of the runtime system.
+\cite{rossberg:alice}.  
+The Clean language supports type-safe saving of arbitrary values (including
+function closures into files \cite{clean:dynamic-io}, and in a recent
+paper proposes a mechanism for runtime solving of class constraints, although
+the idea is as yet not implemented
+\cite[Sect 4.2]{clean:wgp10}.
 
-Every one of these systems fundamentally regards serialization of closures
+All of these systems fundamentally regard serialization of closures
 as a built-in service.  In contrast, our work puts the programmer in
 complete control of serialization, via the usual type-class mechanism.
-Exposing conversion is a significant burden, but one allows the programmer to reason about the cost of sending a message.
-The burden can in any case be ameliorated with syntactic sugar.
-
+Exposing closure conversion is a significant burden --- albeit one that can be
+relieved with some syntactic sugar --- but one allows the
+programmer to reason about the cost of sending a message.
+Similarly, explicit serialization will typically lose structure 
+sharing within a transmitted value, whereas a built-in mechanism can retain it
+--- but that is also true of any traversal of a data structure.
+We do not argue that our approach is always better, but rather that it offers
+a new and unexplored design point.
 
 \section{Conclusions and Future Work}
 %: \label{s:futureWork}
@@ -1628,19 +1646,20 @@ However, as yet it is no more than this: we have a lot of work left to do to mak
 
 Our ongoing work is on two levels.
 At the lower level, we plan to implement \textt{Static} and the corresponding type inference rules in GHC.  This will remove the need for the workarounds described in Section~\ref{s:faking}.
-
 At the higher level, we have designed a framework that builds on the interface described here.
 In it, the main unit of abstraction changes from the process to the \emph{task}: an idempotent, restartable block of code that produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
 
 Whereas the DSL described here lets programmers start processes, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. 
 To make this possible, the task layer represents the computation as a directed acyclic graph, in which tasks are the vertices and the data dependencies between then are the edges, and are exposed to the programmer as \emph{promises}.
-
-We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010}\cite{Murray2011} project.
+We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting project~\cite{Murray2010,Murray2011}.
 
 \acks
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
-$\sigma \nfn \tau$.  Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
+$\sigma \nfn \tau$.  John Hughes helped us to understand details of Erlang, and we enjoyed 
+some design discussion with him about expressing Erlang computational model in Haskell. Koen Claessen
+insightfully pointed out the importance of not making receive ports serialisable.
+Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
 Jeff Epstein would like to thank Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
