@@ -1552,11 +1552,11 @@ Notice that it's not necessary to do any explicit thread synchronization in this
 %: \label{s:performance}
 \label{s:performance}
 
-One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points, and its output is an assignment of each data point to one of $k$ clusters.
+One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points and an integer $k$, and its output is an assignment of each point to one of $k$ clusters.
 
-The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its assigned data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The assignments are collected by the reducer nodes and are used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm until either the centroids stop changing or the maximum number of iterations is reached.
+The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-Because \kmeans{} is computationally demanding, data intensive, and can be easily partitioned into compute units, we feel that it is an ideal test case for Cloud Haskell. We implemented the \kmeans{} algorithm on top of our framework and deployed it to an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \texttt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of \kmeans{} iterations to five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+Because \kmeans{} is computationally demanding, data intensive, and can be partitioned easily,  it provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm using our framework and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
@@ -1564,11 +1564,13 @@ Because \kmeans{} is computationally demanding, data intensive, and can be easil
 }
 \caption{ 
 \label{fig:performance1}
-The performance of the \kmeans{} algorithm as implemented in Cloud Haskell. The input data set was one million 100-dimensional data points. The number of reducer nodes was fixed at 1 for all tests. Performance improves at a better than linear rate as we increase the number of mapper nodes.
+The run-time of the \kmeans{} algorithm in Cloud Haskell. The input data was one million 100-dimensional data points; we used one reducer nodes for all tests. % Performance improves at a better than linear rate as we increase the number of mapper nodes.
 }
 \end{figure}
 
-The performance of \kmeans{} under Cloud Haskell does not compare favorably with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
+The performance of \kmeans{} under Cloud Haskell does not compare favorably 
+\apb{say how bad!} with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
+\apb{Say we just got it running and have not optimized anything.}
 
 % Isis/Paxos/virtual synchrony consensus?
 
@@ -1646,8 +1648,7 @@ In it, the main unit of abstraction changes from the process to the \emph{task}:
 
 Whereas the DSL described here lets programmers start processes, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. 
 To make this possible, the task layer represents the computation as a directed acyclic graph, in which tasks are the vertices and the data dependencies between then are the edges, and are exposed to the programmer as \emph{promises}.
-
-We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010}\cite{Murray2011} project.
+We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting project~\cite{Murray2010,Murray2011}.
 
 \acks
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
