@@ -191,7 +191,7 @@ However, unlike Erlang, Cloud Haskell supports allows shared-memory concurrency 
 
 \item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
 
-\item A demonstration of the effectiveness of our approach in the form of example applications (Section \ref{Benchmarks}). We provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
+\item A demonstration of the effectiveness of our approach in the form of an example application and performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Sections \ref{s:completeApp} and \ref{s:performance}). The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
 \end{itemize}
 \pagebreak
 
@@ -280,7 +280,7 @@ If there is no message of the appropriate type on the queue, \textt{expect} wait
 %: \label{s:serialization}
 \label{s:serialization}
 
-When we said that the data to be transmitted must be serializable, we meant that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type class).
+When we said that the data to be transmitted must be serializable, we meant that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type classes).
 \textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a \textt{TypeRep} that captures the item's type.  
 
 While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and can therefore be part of a message, some data types are emphatically \emph{not} serializable. 
@@ -1004,7 +1004,9 @@ For a function-valued closure it makes sense to apply \textt{unClosure} once, an
 apply the resulting function many times, so that the deserialization is
 performed just once.
 
-\subsection{Closures in practice} %: \label{s:closures-in-practice}\label{s:closures-in-practice}
+\subsection{Closures in practice} 
+%: \label{s:closures-in-practice}
+\label{s:closures-in-practice}
 
 To see closures in action, here is our earlier \textt{sendFunc} example, 
 expressed using closures:
@@ -1073,7 +1075,9 @@ However in the next section we describe some simple Template Haskell support.
 % form of run-time introspection, and Haskell does not currently provide
 % that.
 
-\section{Faking it}%: \label{s:faking}\label{s:faking}
+\section{Faking it}
+%: \label{s:faking}
+\label{s:faking}
 
 We have not yet implemented \textt{static} in GHC, but we have implemented
 some simple workarounds that allow us (and you, gentle reader) to experiment
@@ -1427,12 +1431,12 @@ Erlang has a nice feature that allows program modules to be updated over the wir
 
 Because we have not implemented dynamic code update, Cloud Haskell code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes on the programmer the responsibility to ensure that all hosts are running the same version of the compiled executable.  Because \textt{TypeRep}s are nominal, and because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that use the same name to refer to message types with different structure would most probably crash the deserializing process.
 
-\section{A complete Cloud Haskell Application}
+\section{A complete Cloud Haskell Application}%: \label{s:completeApp}\label{s:completeApp}
 As a practical example, we present a complete, albeit trivial, example of a distributed application. 
 The application provides a remote counter, which can be incremented and queried by a client process; it is based on an Erlang program, presented by Armstrong and colleagues~\cite{Erlang93}. 
 We'll discuss every step necessary to actually get results from this example, including the configuration and deployment processes.
 
-Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle multiplex several nodes of a distributed application on a single physical computer, the benefits and challenges of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which we deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \textt{acs-01} and \textt{acs-02}.
+Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle multiplex several nodes of a distributed application on a single physical computer, the benefits and challenges of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which we deploy the application has a unique name. This example only needs two computers; we assume that they are named \textt{acs-01} and \textt{acs-02}.
 
 Cloud Haskell supports several configuration options, only a few of which are necessary here. These options can be set in a configuration file, which is loaded by the program, or on the command line. Here, we'll describe how to create a suitable configuration file.
 
@@ -1535,11 +1539,12 @@ The lookup tables are merged and stored in the \textt{ProcessM} monad, where the
 The \textt{go} function is split into two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
 In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
-\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which is given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
+\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
+The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which are given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
 
 Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
 
-\section{Performance}
+\section{Performance}%: \label{s:performance}\label{s:performance}
 
 One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm.
 
@@ -1570,46 +1575,42 @@ possibly measure utilization as well?
 \end{center}
 
 
-\section{Future work}
-%: \label{s:futureWork}
-\label{s:futureWork}
-The framework, as presented in this paper, provides a good starting point for building a distributed application. Our ongoing work in this area is based around a higher-level framework that builds on this one. In it, the main unit of abstraction changes from the process to the {\em task}: an idempotent, restartable block of code which produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
-
-Whereas the process abstraction lets programmers start threads, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. To this end, it uses the current framework as a building block. Data dependencies and tasks are represented as the edges and vertices, respectively, of a directed acyclic graph, and are exposed to the programmer as {\em promises}.
-
-With our task framework, we hope to provide functionality similar to well-known distributed frameworks like MapReduce \cite{MapReduce2008} and Dryad \cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010}\cite{Murray2011} project.
-
 % Isis/Paxos/virtual synchrony consensus?
 
 \section{Related work} \label{s:related}
 
-In scientific computing, the most well-known solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is optimized for supercomputers, rather than clusters of networked commodity PCs. 
+In scientific computing, the most scalable solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is language-independent; interfaces are available for Fortran, C, and C++, and an array of different implementations have been optimized for a variety of supercomputer architectures.  In comparison, Cloud Haskell, as a DSL embedded in Haskell, is not easily available from other languages.
+This is of course a weakness, but it is also a great strength.  
+Haskell's type system separates shared-memory concurrency, distributed-memory concurrency and pure computation, giving programmers powerful reasoning tools that are not available when using a subroutine library called from a language with a weaker type system. 
 
 There have been lots of mechanisms for executing functions on remote
-systems. Specific to Java is the Remote Method Invocation (RMI)
+systems, staring with Birrell and Nelson's RPC~\cite{birrel1984}.
+Specific to Java is the Remote Method Invocation (RMI) mechanism
 \cite{javarmi}. CORBA proides the Interface Description Language (IDL)
 \cite{corbaidl} to define implementation-language-independent remote
 functions. Web services often use the SOAP standard to implement
-remote procedure call.
+remote procedure call.  However, none of these mechanisms deal with the problem of transmitting first-class functions that capture their environment.
+Although it may be argued that any object-oriented language that supports mobile objects does as a consequence also support mobile functions, there have been few full implementations of mobile objects.  A notable exception is Emerald~\cite{jul1988}, which dealt with the issue of environment capture  by copying the relevant parts of the environment into an object when it was created.  
+All objects, including stack frames, were mobile; serialization was handled by the run-time system and depended on introspection.
 
 Implementing a framework for distributed computing in Haskell has been
 done before, in the form of Glasgow Distributed Haskell
 \cite{gdh2001}. Unlike our work, it tries to maintain the semantics of
 shared-memory concurrency in a distributed environment, rather than
 insisting on message-based communication between nodes. We argue that this is 
-undesirable becuase its cost model is hidden.  
+undesirable because it gives the programmer no model for reasoning about the costs of the computation.  
 
-Our operations on channels are somewhat reminiscent of Concurrent ML's events \cite{reppy:book},
-but CML does not support distribution because that is incompatible with its
-model of synchronisation.  paraML, an experimental variant of CML, did have
-a distributed implementation; its serialisation mechanism was entirely built-in \cite{bailey:paraml}.
+Our operations on channels are somewhat reminiscent of Concurrent ML's events~\cite{reppy:book}.
+However, Concurrent ML does not support distribution because that would be incompatible with its
+model of synchronization.  paraML, an experimental variant of Concurrent ML, did have
+a distributed implementation; its serialization mechanism was entirely built-in \cite{bailey:paraml}.
 
 The Acute language does a very solid job of dealing with type-safe
 marshalling, based on passing type representations at runtime
 \cite{acute:jfp}.  Serialization is mostly built-in, with some
 programmer control offered for ``rebinding'', when values should be
-rebound rather than serialised.  HashCaml is (alpha-release)
-implemented variant of OCaml that supports type-safe distributed
+rebound rather than serialised.  HashCaml, currently in alpha-release, is a
+variant of OCaml that supports type-safe distributed
 programming, including serialization of function values.  Like Actue
 it uses explicit type passing, the details of how the free variables
 of function closures are marshalled are hazy.  Rossberg's language
@@ -1619,15 +1620,27 @@ but that is regarded as a built-in service of the runtime system.
 
 Every one of these systems fundamentally regards serialization of closures
 as a built-in service.  In contrast, our work puts the programmer in
-complete control of serialization, via tha usual type-class mechanism.
-Exposing conversion is a significant cost, but one that also exposes the
-cost model, and can in any case be ameliorated with syntactic sugar.
+complete control of serialization, via the usual type-class mechanism.
+Exposing conversion is a significant burden, but one allows the programmer to reason about the cost of sending a message.
+The burden can in any case be ameliorated with syntactic sugar.
 
-% more here?
 
-% \appendix
-% \section{Appendix Title}
-% This is the text of the appendix, if you need one.
+\section{Conclusions and Future Work}
+%: \label{s:futureWork}
+\label{s:futureWork}
+Cloud Haskell, as presented in this paper, provides a good starting point for building a distributed application.  
+However, as yet it is no more than this: we have a lot of work left to do to make ``Haskell in the Cloud'' a reality.
+
+Our ongoing work is on two levels.
+At the lower level, we plan to implement \textt{Static} and the corresponding type inference rules in GHC.  This will remove the need for the workarounds described in Section~\ref{s:faking}.
+
+At the higher level, we have designed a framework that builds on the interface described here.
+In it, the main unit of abstraction changes from the process to the \emph{task}: an idempotent, restartable block of code that produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
+
+Whereas the DSL described here lets programmers start processes, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. 
+To make this possible, the task layer represents the computation as a directed acyclic graph, in which tasks are the vertices and the data dependencies between then are the edges, and are exposed to the programmer as \emph{promises}.
+
+We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting \cite{Murray2010}\cite{Murray2011} project.
 
 \acks
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
