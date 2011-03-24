@@ -547,7 +547,7 @@ data MathOp = Add ProcessId Double Double
             | DivByZero
 \end{code}
 
-There are several problems with using a sum type like \mbox{\textt{MathOp}.}
+There are several problems with using a sum type like \textt{MathOp}.
 Remember that \textt{expect} can select messages only by type.
 Thus, a process receiving \textt{MathOps} messages would need to be able to respond to all variants, even those that don't make sense: presumably, only client processes should receive \textt{Answer} and \textt{DivByZero} while only the calculating process should receive \textt{Add} and \textt{Divide}. 
 Moreover, putting all messages into a single sum type breaks modularity by exposing details of the calculating process to the client; when we add a new mathematical operation, every client will need to update its code, even if it doesn't use that operation.
@@ -822,8 +822,8 @@ However, Java RMI also uses introspection to provide the programmer with fine co
 which fields are serialized (the \textt{transient} flag prevents serialization), and exactly how the data are encoded (by providing the private methods \textt{writeObject} and \textt{readObject}); it also allows the programmer to take control of the whole serialization process by implementing the \textt{Externalizable} interface, which means implementing the \textt{writeExternal} and \textt{readExternal} methods by hand. 
 As a consequence, Java RMI avoids the three disadvantages listed above, while still automating serialization for simple data objects.
 
-For deserialisation, however, the Java approach depends crucially on the \emph{runtime} ability
-to take an arbitrary type representation and cough up a deserialiser for that type.
+For deserialization, however, the Java approach depends crucially on the \emph{runtime} ability
+to take an arbitrary type representation and cough up a deserializer for that type.
 Haskell lacks this ability so this option is not open to us.
 Yet, as we argue above, building-in serializability of every value is
 too blunt an instrument.  We do need \emph{some} built-in support, but
@@ -857,7 +857,7 @@ Perhaps surprisingly, this works not only for functions, but also for data value
 For these we simply statically allocate the \textt{Tree} value (at compile time), and pass the label of its root.
 %In fact, we do the same for functions, passing the label of its 
 %statically-allocated closure object (which in turn points to its code).
-  
+
 
 \begin{figure}[t!]
 \begin{minipage}{\linewidth}
@@ -1557,7 +1557,7 @@ One goal of a distributed system is to be able coordinate compute- and data-inte
 
 The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-Because \kmeans{} is computationally demanding, data intensive, and can be partitioned easily,  it provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm using our framework and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+Because \kmeans{} is computationally demanding, data intensive, and can be partitioned easily,  it provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm using our framework and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
@@ -1570,9 +1570,13 @@ The run-time of the \kmeans{} algorithm in Cloud Haskell. The input data was one
 }
 \end{figure}
 
-The performance of \kmeans{} under our prototype implementation Cloud Haskell does not yet compare favorably 
-\apb{say how bad!} with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
-\apb{Say we just got it running and have not optimized anything.}
+It's difficult to qualitatively evaluate the performance. In results published by Ekanayakea~\cite{indiana}, an implementation of \kmeans{} in Hadoop performs about twice as fast as our unoptimized implementation. 
+However, these results are not directly comparable: first, Ekanayakea's team are using a different data set: their points are only two-dimensional, while ours are 100-dimensional. 
+Furthermore, the Hadoop tests were run on a handful of powerful multicore machines, while the Cloud Haskell tests were run a larger number of single core machines (although the total number of cores was the same), so that their nodes may have benefited from faster access to the data. 
+Based on these caveats, we estimate that given comparable tests, our framework would at least hold its own against Hadoop. 
+However, we're not so optimistic that we could catch up to the MPI framework and CGL-MapReduce, which, according to the same authors, are orders of magnitude faster than us. 
+We plan to more fully explore the performance characteristics of Cloud Haskell in the future, and specifically to address the performance issues related to locality and automatic resolution of data dependencies with the introduction of our task layer, discussed in Section \ref{s:futureWork}.
+
 
 % Isis/Paxos/virtual synchrony consensus?
 
@@ -1613,7 +1617,7 @@ The Acute language does a very solid job of dealing with type-safe
 marshalling, based on passing type representations at runtime
 \cite{acute:jfp}.  Serialization is mostly built-in, with some
 programmer control offered for ``rebinding'', when values should be
-rebound rather than serialised.  HashCaml, currently in alpha-release, is a
+rebound rather than serialized.  HashCaml, currently in alpha-release, is a
 variant of OCaml that supports type-safe distributed
 programming, including serialization of function values.  Like Actue
 it uses explicit type passing, the details of how the free variables
