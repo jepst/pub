@@ -65,17 +65,18 @@
       \csname lst@SetFirstLabel\endcsname}
     {\csname lst@SaveFirstLabel\endcsname}
     \lstset{
-      basicstyle=\small\ttfamily,
+      basicstyle=\small\sffamily,
       flexiblecolumns=false,
       basewidth={0.5em,0.45em},
       literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
                {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
                {\\\\}{{\char`\\\char`\\}}1
                {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
-               {/=}{{$\neq$}}1{...}{{\textrm{ \ldots}}}1
+               {/=}{{$\neq$}}1
                {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
 %               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
-               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {...}{{\textrm{ \ldots}}}1
+               {>>}{{$\gg$}}2 {>>=}{{$\gg=$}}2
                {|}{{$\mid$}}1               
     }
 
@@ -128,13 +129,12 @@
            {simonpj@microsoft.com}
 
 \maketitle
-
 \begin{abstract}
 % 1. What's the problem?
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present a framework for developing Haskell programs to be run in a distributed-memory computing environment. It provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. We believe our framework will let Haskell programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrency.
+We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, while retaining compatibility with Haskell's established shared-memory concurrency. We believe that Cloud Haskell will let programmers create fault-tolerant, high-performance distributed systems with a minimum of effort, while retaining Haskell's strengths in strong typing and shared-memory concurrency.
 
 \end{abstract}
 
@@ -154,41 +154,46 @@ We present a framework for developing Haskell programs to be run in a distribute
 With the age of steadily-improving processor performance behind us, we must learn to compute with more, rather than faster, processors. 
 A \emph{cloud} is data center that makes available a large number of processors for storing and processing users' data; we'll use this term to mean specifically a network of computers that have independent failure modes and separate memories.
 
-How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using conventional shared-memory concurrency primitives, such as locks and transactions. 
+How should we program the cloud?  One approach is to simulate a familiar shared-memory multiprocessor, and then to program the simulated computer using shared-memory concurrency primitives, such as locks and transactions. 
 %We have two objections to this approach.  The first is that the preponderance of the evidence is that shared-memory concurrency is \emph{just too hard}.  
 %\spj{Not a strong argument.  Message passing is always available for shared memory machines and people don't use it much.  It's just
 %too inconvenient, or its cost model doesn't fit.  I'd nuke this objection.}
 %For example, 
 %$<<$Automatically classifying benign and harmful data races using replay analysis?$>>$
 Although possible, we don't believe this to be the best way forward.
-To be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs is data movement; this is true whether one measures cost in terms of energy or time.  A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
+To be effective, a programming model must be accompanied by a cost model: it must give programmers tools for reasoning about the cost of computation.  In a distributed memory system, one of the most significant costs, in both energy and time, is data movement.
+A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
 Synchronization is another major cost; while shared memory makes some synchronization explicit (locks, compare and swap), the synchronization implicit in the simulation of the memory itself, and in higher-level abstractions such as transactions, remains implicit.
 
 Instead, we turn to a solution popularized by \mbox{Erlang}\,\cite{Erlang93} and MPI\,\cite{mpi99}: {\em message passing}. The message-passing model stipulates that the concurrent processes have no access to each other's data: any data that needs to be communicated from one process to another are explicitly sent in {\em messages}.  This make the costs of communication apparent.
 It also means that a concurrent process is natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
 %Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into memory.
 
-Failure is a very real issue in the cloud; indeed, in many ways failure is the defining issue of distributed computation.  In a network of dozens or hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the whole computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
+Failure is, in many ways, \emph{the} defining issue of distributed computation.  In a network of hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
 A programming system for the cloud must therefore be able to tolerate partial failure.  Here again, Erlang has a solution that has stood the test of time; 
 %the highest reliability programs on the planet are written in Erlang, and achieve 9 nines reliability.  We 
 we don't innovate in this area, but adopt Erlang's solution (summarized in Section \ref{FaultTolerance}).
 
-If Erlang has been so successful, you may wonder what Haskell brings to the table. 
-The short answer is: purity, types, and monads.  As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed.  More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. 
+Cloud Haskell is a domain-specific language for cloud computing, implemented as a shallow embedding in Haskell.
+It presents the programmer with a computational model  similar to Erlang's, but with additional advantages that stem from Haskell's purity, types, and monads.  
+As a pure functional language, data is by default immutable, so shared, mutable data won't be missed.  
+More importantly, the implementation can decide whether to share or copy immutable data: the choice is semantically invisible. 
 Moreover, pure functions are idempotent; this means that functions running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
 Types in general, and monadic types in particular, help to guarantee properties of programs statically.  
 For example, a function that has an externally-visible effect such as sending or receiving a message \emph{cannot} have the same type as one that is pure.
 Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
 The contributions of this paper are:
+\vspace{-1ex}
 \begin{itemize}
-\item An interface for distributed programming in Haskell (Section \ref{s:processes}). Following the Erlang model, our framework provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. We also provide functions for starting new threads remotely, and for fault tolerance, which closely follow Erlang. 
-However, unlike Erlang, our framework supports the use of explicit shared-memory concurrency mechanisms \emph{within} one of our concurrent processes.
+\item A description of Cloud Haskell's interface functions. (Section \ref{s:processes}). Following the Erlang model, our language provides a system for exchanging messages between concurrent processes, regardless of whether those threads are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
+However, unlike Erlang, Cloud Haskell supports allows shared-memory concurrency \emph{within} one of its concurrent processes.
 
-\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{Closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
+\item A method for serializing function closures to enable higher-order functions to work in a distributed environment (Section \ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
 
 \item A demonstration of the effectiveness of our approach in the form of example applications (Section \ref{Benchmarks}). We provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups. The highly parallel nature of this algorithm makes it well-suited for deployment in a distributed environment.
 \end{itemize}
+\pagebreak
 
 \section{Processes and messages}
 We start with an overview of the basic elements of Cloud Haskell:
@@ -199,7 +204,7 @@ All of the elements of our DSL are listed in Figure~\ref{fig:api}.
 \label{s:processes}
 The basic unit of concurrency in Cloud Haskell is the {\em process}:  a concurrent activity that has been ``blessed'' with the ability to send and receive messages. As in Erlang, processes are lightweight, with low creation and scheduling overhead.  Processes are identified by a unique process identifier, which can be used to send messages to the new process.
 
-In most respects, our framework follows Erlang by favoring message-passing as the primary means of communication between processes. Our framework differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our framework ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
+In most respects, Cloud Haskell follows Erlang by favoring message-passing as the primary means of communication between processes. Our language differs from Erlang, though, in that it also supports shared-memory concurrency within a single process. The existing elements of Concurrent Haskell, such as \textt{MVar} for shared mutable variables and \textt{forkIO} for creating lightweight threads, are still available to programmers who wish to combine message passing with the more traditional approach. This is illustrated in Figure~\ref{fig:ProcessBubbles}. Our embedding ensures that mechanisms specific to shared-memory concurrency cannot be inadvertently used between remote systems.  The key idea that make this separation possible is that not all data types can be sent in a message; in particular, \textt{MVar}s and \textt{ThreadId}s are not Serializable.
 We discuss this point further in Section~\ref{s:serialization}.
 
 \begin{figure}[t]
@@ -284,8 +289,8 @@ Although one can imagine a synchronous distributed variable that mimics the sema
 Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  
 Notice, however, that we do not attempt to stop the programmer from using \textt{MVar}s within a single process: processes are allowed to use Haskell's \textt{forkIO} function to create \emph{local} threads that can share memory using \textt{MVar}s.
 The same is true for \textt{TVar}s: the fact that they are non-serializable guarantees that \textt{STM} transactions 
-do not span processes, but the programmer is free to use STM \emph{within} a process.  
-In fact, our implementation uses STM to protect the message queue, as discussed in Section~\ref{s:Implementation}.
+do not span processes, but the programmer is free to use \textt{STM} \emph{within} a process.  
+In fact, our implementation uses \textt{STM} to protect the message queue, as discussed in Section~\ref{s:Implementation}.
 
 %Together, they correspond to Erlang's \textt{receive} construct. Since our framework is packaged as a library rather than as a language extension, we use the \textt{MatchM} type to approximate Erlang's specialized syntax. \textt{receiveWait}'s first parameter is a list of \textt{match} invocations, where the lambda function argument to each \textt{match} potentially accepts a different type of message. Thus, the programmer can selectively dequeue messages of particular types. As in Erlang, incoming messages are tested in the order that the matching patterns appear. If no message in the queue is of any of the acceptable types, \textt{receiveWait} will block until such a message is received. % maybe mention matchIf, receiveTimeout, etc
 
@@ -296,8 +301,9 @@ In fact, our implementation uses STM to protect the message queue, as discussed 
 
 \begin{figure}[t!]
 \small
-\renewcommand{\baselinestretch}{0.85}
-\textbf{Basic messaging} 
+\renewcommand{\baselinestretch}{0.80}
+\newcommand{\apisection}[1]{\textbf{#1} \vspace{-0.5ex}}
+\apisection{Basic messaging}
 \begin{code}
 instance Monad ProcessM
 instance MonadIO ProcessM
@@ -305,7 +311,7 @@ send   :: Serializable a => ProcessId -> a
        -> ProcessM ()
 expect :: Serializable a => ProcessM a
 \end{code}
- \textbf{Channels}
+ \apisection{Channels}
 \begin{code}
 newChan  :: Serializable a 
          => ProcessM (SendPort a, ReceivePort a)
@@ -319,7 +325,7 @@ mergePortsRR :: Serializable a => [ReceivePort a]
              -> ProcessM (ReceivePort a)
 \end{code}
 
- \textbf{Advanced messaging}
+ \apisection{Advanced messaging}
 \begin{code}
 instance Monad MatchM
 receiveWait    :: [MatchM q ()] -> ProcessM q
@@ -332,7 +338,7 @@ matchIf :: Serializable a => (a -> Bool)
 matchUnknown :: ProcessM q -> MatchM q ()
 \end{code}
 
- \textbf{Process management}
+ \apisection{Process management}
 \begin{code}
 spawn :: NodeId -> Closure (ProcessM ()) 
       -> ProcessM ProcessId
@@ -343,14 +349,14 @@ getSelfPid :: ProcessM ProcessId
 getSelfNode :: ProcessM NodeId
 \end{code}
 
- \textbf{Process monitoring}
+ \apisection{Process monitoring}
 \begin{code}
 linkProcess :: ProcessId -> ProcessM ()
 monitorProcess :: ProcessId -> ProcessId 
                -> MonitorAction -> ProcessM ()
 \end{code}
 
- \textbf{Initialization}
+ \apisection{Initialization}
 \begin{code}
 type RemoteTable = [(String,Dynamic)]
 runRemote      :: Maybe FilePath -> [RemoteTable] 
@@ -361,22 +367,22 @@ getPeers       :: ProcessM PeerInfo
 findPeerByRole :: PeerInfo -> String -> [NodeId]
 \end{code}
 
- \textbf{Syntactic sugar}
+ \apisection{Syntactic sugar}
 \begin{code}
 mkClosure :: Name   -> Q Exp
 remotable :: [Name] -> Q [Dec]
 \end{code}
 
- \textbf{Logging}
+ \apisection{Logging}
 \begin{code}
 say :: String -> ProcessM ()
 \end{code}
 
- \textbf{Type class}
+ \apisection{Type classes}
 \begin{code}
 class (Binary a,Typeable a) => Serializable a
 class Typeable a where typeOf :: a -> TypeRep
-class Binary t where { put :: t -> PutM (); get :: Get t }
+class Binary t where {put::t -> PutM (); get::Get t}
 encode :: Binary a => a -> ByteString
   -- Defined in terms of put
 decode :: Binary a => ByteString -> a
@@ -501,7 +507,7 @@ linkProcess    :: ProcessId -> ProcessM ()
 
 In Section~\ref{s:sendAndExpect}, we introduced the \textt{expect} function, which lets us receive messages of a particular type. But what if our process wants to be able to accept messages of multiple types? Ideally, we'd like to be able to approximate the Erlang \textt{receive} syntax:
 \needspace{10ex}
-\begin{lstlisting}[numbers=left,language=Erlang,escapeinside={\%}{\^^M}]
+\begin{lstlisting}[numbers=left,numberstyle=\tiny,language=Erlang,escapeinside={\%}{\^^M}]
 math() ->
    receive
       {add, Pid, Num1, Num2} -> % \label{erl_addmatch}
@@ -631,7 +637,8 @@ after
 end
 \end{lstlisting}
 
-This code will wait at most 50 seconds to receive a response to its query; after 50 seconds, it will stop waiting and display an error message. Our framework's corresponding function is \textt{receiveTimeout}, which is very similar to \textt{receiveWait}. Like \textt{receiveWait}, it takes a list of \textt{match}es, but it also takes a timeout value. If the timeout is exceeded, the function returns \textt{Nothing}.
+This code will wait at most 50 seconds to receive a response to its query; after 50 seconds, it will stop waiting and display an error message. 
+The corresponding function in Cloud Haskell is \textt{receiveTimeout}, which is very similar to \textt{receiveWait}. Like \textt{receiveWait}, it takes a list of \textt{match}es, but it also takes a timeout value. If the timeout is exceeded, the function returns \textt{Nothing}.
 
 \begin{code}
 receiveTimeout :: Int -> [MatchM q ()] -> 
@@ -711,6 +718,7 @@ If this biased behavior is undesirable, use \textt{mergePortsRR} instead. The po
 Cloud Haskell also provides a family of \textt{combinePorts} functions that can be used to combine ports of different types, but we do not discuss them in this paper.
 
 \section{Closures}
+%: \label{s:closures}
 \label{s:closures}
 \apb{We agreed to move this to between Sections~\ref{s:processes} and \ref{s:matching}.  I tried that; the problem that the first example uses Channels, which aren't introduced until Section~\ref{s:Channels}.  If I re-write the example with ProcessIds, then there is nothing for the environment to capture, and it doesn't make our point.  We could make another example, but we didn't like the \textt{printSum} example.  So I left this section in it's original place.  I think that the flow is OK; the problem is that something we identify as a major contribution comes a bit late. \vspace{2ex}}
 
@@ -722,8 +730,8 @@ higher-order programming language.
 To see how pervasive this question is, consider \textt{sendFunc}, which creates an anonymous function and sends it on a channel:
 \begin{code}
 -- wrong
-sendFunc :: SendPort (Int -> Int) -> Int -> ProcessM ()
-sendFunc p x = sendChan p (\y -> x+y+1)
+sendFunc :: SendPort (Int->Int) -> Int -> ProcessM ()
+sendFunc p x = sendChan p (\y -> x + y + 1)
 \end{code}
 Notice that the function sent on the channel, \lstinline!(\y -> x + y + 1)!,
 is a closure that captures its free variables,
@@ -744,9 +752,11 @@ This works because equality is a structural property of the types: we know that 
 
 Now lets get back to the problem at hand: specifying that a function is serializable.
 We would like to write something like:
-\begin{code}
-  instance Serializable (types of the free variables of an a->b) => Serializable (a->b) where ...
-\end{code}
+\begin{lstlisting}[language=Haskell,
+			escapechar={\%},
+			stringstyle=\ttfamily]
+  instance Serializable (%\textit{types of the free variables of an}% a->b) => Serializable (a->b) where ...
+\end{lstlisting}
 but that can't be expressed, and for good reason:  serializability of a function is not a structural property of the function, because Haskell's view of a function is purely extensional.  
 In other words, all we can do with a function is apply it; we can't introspect on its internal structure
 
@@ -762,14 +772,13 @@ For example, consider the task of creating a new remote worker process:
                            			  ; sendChan s ans })
           			 ; ... }
 \end{code}
-\je{I don't understand what you're trying to show with this example.}
+%\je{I don't understand what you're trying to show with this example.}
 The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
 its free variables, \textt{s}, which is bound to the \textt{sendPort} on which
 the remote process should send back the answer.
 Thus, serializing this argument requires serializing a function with a free variable.
 We can't avoid this problem, because the essence of distributed computation is providing a a function like \textt{spawn} that starts a remote computation; in a higher-order language like Haskell, that must inevitably
 involve serializing a closure of some kind.
-We can hardly restrict \textt{spawn} to functions that don't have free variables, and even if we wanted to do so, there is no way to express that restriction.
 
 \subsection{Prior Solutions}
 
@@ -788,7 +797,7 @@ has multiple disadvantages:
 \begin{itemize}
 \item It relies on a single built-in notion of serializability.
 In contrast, the \texttt{Serializable} type class introduced in 
-Section~\ref{s:serializable} gives the programmer control over how
+Section~\ref{s:serialization} gives the programmer control over how
 values are serialized.  For example, a data structure might have
 redundant information cached in the nodes, which should be reconstructed
 at the far end rather than being serialized.  
@@ -819,129 +828,125 @@ the main contributions of this paper.
 
 \subsection{Static values}
 
-We begin with a simple intuition: some closures can readily be
-transmitted to the other end of the wire, namely ones that have no
-free variables.  For the present we make a simplifying assumption,
-that every node is running the same code.  (We return to the question
+We begin with a simple observation: some functions can be readily
+transmitted to the other end of the wire, namely, functions that have no
+free variables.  For the present we make the simplifying assumption that every node is running the same code.  (We return to the question
 of code that varies between nodes in Section~\ref{s:code-update}.)
 Under this assumption, a closure without free variables can be
-readily be serialized to a single symbolic code address, also called a linker label.
+readily serialized as a single symbolic code address, also called a linker label.
+
+\lstset{mathescape=true}
 
 To distinguish values that can be readily serialized from those that cannot, we introduce a new type constructor
-$(\text{\tt Static}~\tau)$ to classify such values.  The type 
+\textt{(Static $\;\tau$)} to classify such values.  The type 
 constructor \textt{Static} is a new built-in primitive, 
 enjoying a built-in serialization instance:
 \begin{code}
   instance Serializable (Static a)
 \end{code}
 It is helpful to remember this intuition: \emph{the defining property of
-a value of type $(\text{\tt Static}\;\tau)$ is that it can be serialized},
+a value of type \emph{\textt{(Static} $\tau$)} is that it can be serialized},
 moreover, that it can be serialized without knowledge of how to serialize $\tau$.
 Operationally, the implementation serializes a \textt{Static} value by first evaluating it,
 and then serializing the code label in the result of the evaluation.  
+\apb{This makes sense to me if $\tau$ is \textt{a -> b}, but not when $\tau$ is \textt{Int} or \textt{Tree Int}.}
 
 \begin{figure}[t!]
 \begin{minipage}{\linewidth}
 $$
 \begin{array}{rcl}
-\Gamma & ::= & \overline{x :_{\delta} \sigma} \\
-     \delta & ::= & S | D
+\Gamma & ::= & \overline{x :_{\delta} \sigma} \\[1ex]
+     \delta & ::= & \mbox{{\sf S}} | \mbox{{\sf D}}
 \end{array}
 $$
 \begin{align*}
-\Gamma\downarrow = \{ x:_{s} \sigma \mid x :_{s} \sigma \in \Gamma \}
+\Gamma\downarrow ~=~ \{ x:_{\textsf{s}} \sigma \mid x :_{\textsf{s}} \sigma \in \Gamma \}
 \end{align*}
 
 \begin{equation*}
-\tag{Static~intro.}
+\tag{Static~intro.}\label{StaticIntro}
 \frac{\Gamma\downarrow~\entails e : \tau}
-     {\Gamma \entails \text{\tt static}~e : \text{\tt Static}~\tau}
+     {\Gamma \entails \textsf{static}~e : \textsf{Static}~\tau}
 \end{equation*}
 
 \begin{equation*}
-\tag{Static~elim.}
-\frac{\Gamma \entails e : \text{\tt Static}~\tau}
-     {\Gamma \entails \text{\tt unstatic}~e : \tau}
+\tag{Static~elim.}\label{StaticElim}
+\frac{\Gamma \entails e : \textsf{Static}~\tau}
+     {\Gamma \entails \textsf{unstatic}~e : \tau}
 \end{equation*}
 \end{minipage}
 \caption{Typing rules for \textt{Static}} \label{fig:static}
 \end{figure}
-Along with the new type constructor we introduce a new term,
-$(\text{\tt static}\;e)$ to introduce it, and another 
-$(\text{\tt unstatic}\;e)$ to elimiate it.
+Along with the new type constructor, we introduce new terms:
+($\!$\textt{static $\;e$}) to introduce the type, and 
+($\!$\textt{unstatic $\;e$}) to eliminate it.
 The typing judgements for these terms are given in Figure~\ref{fig:static}.
-They embody the following key ideas:
-\begin{itemize}
-\item A \emph{variable is static} iff it is bound at the top level.
-\item A \emph{term $(\text{\tt static}\;e)$ has type $(\text{\tt Static}\;\tau)$} iff 
-$e$ has type $\tau$, and $e$ is static.  
-\end{itemize}
-The type environment $\Gamma$ is a set of variable bindings, each of form $x :_{\delta} \sigma$.
-The subscript $\delta$ is a static-ness flag, which takes the values \textt{S} (static) or
-\textt{D} (dynamic).  The idea is that top-level (static) variables have bindings
-of the form $f\! :_{\text{\tt S}}\! \sigma$, while all other variables have dynamic bindings 
-$x\! :_{\text{\tt D}}\!\sigma$.
+The type environment $\Gamma$ is a set of variable bindings, each of the form $x :_{\delta} \sigma$;
+the subscript $\delta$ is a static-ness flag, which takes the values \textsf{S} (static) or
+\textsf{D} (dynamic).  The idea is that top-level variables are flagged as \textsf{S} by giving them bindings
+of the form $f\! :_{\textsf{S}}\! \sigma$; all other variables have dynamic bindings 
+$x\! :_{\textsf{D}}\!\sigma$.
 (It is straightforward to formalise this idea in the typing judgements for top-level
 bindings and for terms; we omit the details.)
-The operation $\Gamma \downarrow$ filters $\Gamma$ to leave only the
-static (top-level) bindings,thereby checking that a term $\text{\tt
-static}\;e$ is well typed only if all its free variables are static.
+The postfix operation $\downarrow$ filters a type environment
+to leave only the
+\textsf{S} bindings.
+The rule \ref{StaticIntro} states that a term \textt{static $\;e$} is well typed iff all of $e$'s free variables are flagged \textsf{S}, for only then will we be able to show that $e : \tau$ in the filtered environment $\Gamma \downarrow$.
 
-Although simple, these rules have interesting consequences:
+Although simple, these rules embody the following key ideas:
 \begin{itemize}
-\item A static variable may have a non-\textt{Static} type. Consider the 
+\item A \emph{variable} is \textsf{S}-bound iff it is bound at the top level.
+\item A \emph{term} ($\!$\textt{static $\;e$}) has type ($\!$\textt{Static $\;\tau$}) iff 
+$e$ has type $\tau$, and all of $e$'s free-variables are \textsf{S}-bound.  
+\end{itemize}
+They have some interesting consequences:
+\begin{itemize}
+\item A variable with an \textsf{S} binding may have a non-\textt{Static} type. Consider the 
 top-level binding for the identity function:
 \begin{code}
   id :: a -> a
   id x = x
 \end{code}
-The function \textt{id} is by definition static (top-level).  Its binding
-in $\Gamma$ will have $\delta=\text{\tt S}$, but its type is the ordinary
-polymorphic type. However, \textt{(Static id)} has type \textt{(Static (a -> a))}.
+Because the function \textt{id} is top-level, its binding
+in $\Gamma$ will have $\delta=\textsf{S}$, in other words \textt{id} $:_{\textsf{S}}$ \textt{a->a}. However, ($\!$\textt{Static id}) has type ($\!$\textt{Static (a -> a)}).
 
-
-\item A non-static variable may have a \textt{Static} type.  For example
+\item A variable with a \textsf{D} binding may have a \textt{Static} type.  For example
 \begin{code}
   f :: Static a -> (Static a, Int)
   f x = (x, 3)
 \end{code}
-Here \texttt{x} is lambda-bound and so is not a static variable, but it certainly has
+Here, \textt{x} is lambda-bound and so has a \textsf{D} binding,  but \textt{x} certainly has
 a \textt{Static} type.  So fully-dynamic functions
 can readily compute over values of \textt{Static} type.
 
-\item The free variables of a term $(\text{\tt static}\;e)$ need not have
-\text{\tt Static} types. For example, this term is well-typed:
+\item The free variables of a term ($\!$\textt{static}$\,e$) need not have
+\textt{Static} types. For example, this term is well-typed:
 \par{\small
 \begin{code}
-static (length . filter id) :: Static ([Bool] -> Int)
+static (length$\,\circ\,$filter id)::Static ([Bool] -> Int)
 \end{code}
 }
-because all its free variables (\textt{length}, \textt{(.)},
-\textt{filter}, \textt{id}) are bound at top-level and hence are
-static. However, all these functions have their usual types.
+Looking at the argument to \textt{static}, we see that all of its free variables (\textt{length}, \textt{($\circ$)},
+\textt{filter}, and \textt{id}) are bound at top-level and hence have \textsf{S}
+bindings. However, all these functions have their usual types.
 \end{itemize}
-
 \subsection{From static values to closures}
 
 In the examples \textt{sendFunc} and
-\textt{newWorker} (at the start of this Section) we wanted to transmit closures
-that certainly did have free variables.  How do static values help us?
-They help us by making \emph{closure conversion} possible. A closure
-is just a pair of a code pointer and an environment.  With the aid of
-\textt{Static} values we can now represent a closure directly in Haskell:
+\textt{newWorker} (introduced at the start of this section) we wanted to transmit closures
+that certainly did have free variables.  How do static terms help us?
+They help by making \emph{closure conversion} possible. A closure
+is just a pair containing a code pointer and an environment.  With the aid of
+\textt{Static} terms we can now try to represent a closure directly in Haskell:
 \begin{code}
 data Closure a where   -- Wrong
-  MkClosure :: Static (e -> a) -> e -> Closure a
+  MkClosure :: Static (env -> a) -> env -> Closure a
 \end{code}
-As is conventional, we capture the environment in an existential\footnote{
-Existential because \textt{MkClosure}'s type is isomorphic 
-to $\forall a. (\exists e. (e \to a) \times e) \to \text{\tt Closure}\;a$.
-}.
-\apb{How is this different from\\
-\textt{data Closure a = Closure (Static (e -> a))   e}
-?  If I wrote it that way, the problem would still be with us, would it not?   Have existentials really got anything to do with this?}
-Two different closures that have the same type may nonetheless capture environments
-that have differing types.  For example, consider the list of closures \textt{cs}:
+
+\textt{MkClosure} takes two arguments: a \texttt{Static} function and an environment of some (unknown) type \textt{env} that is appropriate as input to the function.
+The fact that the type of the environment is unknown (strictly, it is existentially quantified) means 
+that two closures with the same type may nonetheless capture environments
+with differing types.  For example, consider the list of closures \textt{cs}:
 \begin{code}
   cs :: [Closure Int]
   cs = [MkClosure (static negate) 3,
@@ -949,19 +954,17 @@ that have differing types.  For example, consider the list of closures \textt{cs
 \end{code}
 Both closures in \textt{cs} have the same type, \textt{Closure Int},
 but the first captures an \textt{Int} as its environment, while the second
-captures a \textt{Char}.  (The function \textt{ord} has type \textt{Char->Int}.)
+captures a \mbox{\textt{Char}.}  
+(The function \textt{ord} has type \textt{Char->Int}.)
 
-The trouble is that this closure type is not serializable: precisely
-because the environment is existentially quantified, there is no information
-for how to serialize it!  
-\apb{This explanation doesn't help, particularly because you the objection is a strawman that you dismiss in the next sentence.}
+This closure type is still not serializable, because \textt{env} is not serializable.
 This is apparently easy to solve, by asking
 that the environment be serializable:
 \begin{code}
 data Closure a where   -- Still wrong
-  MkClosure :: Serializable env
-        => Static (env -> a) -> env -> Closure a
-  deriving( Typeable )
+  MkClosure :: Serializable env =>
+        			Static (env -> a) -> env -> Closure a
+  deriving(Typeable)
 \end{code}
 Now serialization is easy:
 \begin{code}
@@ -970,7 +973,7 @@ instance Binary (Closure a) where
 \end{code}
 But how can we \emph{de}-serialize a closure?  The difficulty is
 that, at the receiving end, we do not know the type captured inside
-the closure, so we do not know what deserializer to use.  This initially
+the closure, so we do not know whch deserializer to use.  This initially
 appears to be a very awkward problem indeed. Maybe we have to send a 
 representation of the environment type, and do a run-time type-class lookup
 at the receiving end?  This solution is used by Clean \cite{clean}.  Maybe
@@ -980,59 +983,62 @@ closures, so an infinite regress beckons.
 
 Happily, the solution is simple and, with the benefit of hindsight,
 obvious: perform both serialization and deserialization at \emph{closure-construction time},
-not at \emph{closure-serialization time}:
+not at \emph{closure-serialization time}.  
+In other words, we get rid of the existential quantification, and simply require that the environment be a \textt{ByteString}.  
+
 \begin{code}
 data Closure a where   -- Right
-  MkClosure :: Serializable env
-        => Static (ByteString -> a) 
-        -> ByteString -> Closure a
+  MkClosure :: Static (ByteString -> a) ->
+									ByteString -> Closure a
 \end{code}
-Now the correct deserializer becomes part of the static code pointer 
-in the closure.  Simple.
+Although this may sound draconian, it is perfectly general, because any environment  that is serializable is equipped with \textt{encode} and \textt{decode} functions that will convert it to and from a \textt{ByteString}. 
+In effect, this makes the  correct deserializer becomes part of the static code pointer in the closure.  Simple but effective.
 
-It is easy to un-closure-convert:
+It is easy to un-closure-convert: we just apply the function to the environment.
 \begin{code}
   unClosure :: Closure a -> a
   unClosure (MkClosure f x) = unstatic f x
 \end{code}
-This is when the deserialization of the environment takes place. For a
-function-valued closure it makes sense to apply \textt{unClosure} once, and
+The deserialization of the environment takes place in \textt{unClosure}.
+For a function-valued closure it makes sense to apply \textt{unClosure} once, and
 apply the resulting function many times, so that the deserialization is
-one just once.
+performed just once.
 
-\subsection{Closures in practice} \label{s:closures-in-practice}
+\subsection{Closures in practice} %: \label{s:closures-in-practice}\label{s:closures-in-practice}
 
 To see closures in action, here is our earlier \textt{sendFunc} example, 
 expressed using closures:
 \begin{code}
   sendFunc :: SendPort (Closure (Int -> Int)) 
-     -> Int -> ProcessM ()
-  sendFunc ch x = sendChan ch clo
-    where
-      clo  = MkClosure (static sfun) (encode x)
+                              -> Int -> ProcessM ()
+  sendFunc p x = sendChan p clo
+    where clo = MkClosure (static sfun) (encode x)
 
   sfun :: ByteString -> Int -> Int
   sfun = \bs -> let x = decode bs 
-             in \y -> x + y + 1
+                in \y -> x + y + 1
 \end{code}
-The closure contains the pre-serialized environment \textt{encode x},
+The type of the items that can be sent on port \textt{p} is now \textt{(Closure (Int -> Int))}, instead of just \textt{(Int -> Int)}.
+Instead of just sending a lambda-expression on \textt{p}, we send \textt{clo}, a
+closure containing the pre-serialized environment \textt{encode x},
 and the static function \textt{sfun}. The latter deserializes its
-argument \textt{bs} to get the real argument \textt{x} that it expects.
+argument \textt{bs} to get the real environment \textt{x} that it expects.
 
-As a second example, consider \textt{newWorker} from the beginning of this section.
+Now let's look at the \textt{newWorker} example.
 Using closures we would rewrite it like this:
 \begin{code}
-  nc :: ProcessM ()
-  nc = do { (s,r) <- newChan
-          ; spawn node (MkClosure (static child) (encode s))
-          ; ... }
+  newWorker :: ProcessM ()
+  newWorker = do { (s,r) <- newChan
+                 ; spawn node clo
+                 ; ... }
+    where clo = (MkClosure (static child) (encode s))
 
   child :: ByteString -> ProcessM ()
   child = \bs -> let s = decode bs
-              in do { ...ans...
-                    ; sendChan s ans })
+           		   in do { ans <- ...
+               		     ; sendChan s ans })
 \end{code}
-The type of \texttt{spawn} is given in Figure~\ref{fig:api}; it takes
+The type of \textt{spawn} is given in Figure~\ref{fig:api}; it takes
 a closure as its second argument.
 
 \subsection{Summary}
@@ -1040,14 +1046,18 @@ a closure as its second argument.
 In this section we introduced a rather simple set of language primitives:
 \begin{itemize}
 \item A new type constructor \textt{Static}, with built-in serialization.
-\item A new term form $(\text{\tt static}~e)$.
-\item A new primitive function \textt{unstatic :: Static a -> a}.
+\item A new term form ($\!$\textt{static$\,e$}).
+\item A new primitive function \textt{unstatic$\!$::$\!$Static a -> a}.
 \end{itemize}
+
+
+\lstset{mathescape=false}
+
 Building on these primitives we can manually construct closures and
 control exactly how and when they are serialized.
 Performing manual closure conversion is tiresome for the programmer,
 and one might wonder about adding some syntactic sugar.
-We have not yet explored this option very much, preferring to work out the
+We have not yet explored this option in depth, preferring to work out the
 foundations first.
 However in the next section we describe some simple Template Haskell support.
 
@@ -1063,18 +1073,18 @@ However in the next section we describe some simple Template Haskell support.
 % form of run-time introspection, and Haskell does not currently provide
 % that.
 
-\section{Faking it}
+\section{Faking it}%: \label{s:faking}\label{s:faking}
 
-We have not yet implemented statics in GHC, but we have implemented
-some simple workarounds that allow us (and you, gentle reader) to experiement
-with them without changing GHC.  We describe these workarounds in this section.
+We have not yet implemented \textt{static} in GHC, but we have implemented
+some simple workarounds that allow us (and you, gentle reader) to experiment
+with closures without changing GHC.  We describe these workarounds in this section.
 
 \subsection{Example}
-As a running example, here is the code for \textt{sfun} using the workarounds:
+Here is the code for \textt{sendFunc} using the workarounds; we will use this as a running example.
 \begin{code}
-  sf :: SendPort (Closure (Int -> Int)) 
-     -> Int -> ProcessM ()
-  sf ch x = sendChan ch ($(mkClosure 'add1) x)
+  sendFunc :: SendPort (Closure (Int -> Int)) 
+                              -> Int -> ProcessM ()
+  sendFunc p x = sendChan p ($(mkClosure 'add1) x)
 
   add1 :: Int -> Int -> Int
   add1 x y = x + y + 1
@@ -1083,12 +1093,13 @@ As a running example, here is the code for \textt{sfun} using the workarounds:
 \end{code}
 The programmer still has to do manual closure conversion, by defining
 a top-level function (\textt{add1} in this case) whose first argument is
-the environment.  However, the code is otherwise significantly more 
+the environment (an \textt{Int}).  However, the code is otherwise significantly more 
 straightforward than in Section~\ref{s:closures-in-practice}.
 
 The Template Haskell splice \textt{$(mkClosure 'add1)}
 is run at compile time.  Its argument \textt{'add1} is Template Haskell notation
-for the (quoted) name of the \textt{add1} function.
+for the (quoted) name of the \textt{add1} function.  
+\textt{mkClosure} (with a small \textt{m}) operates on the \emph{names} of functions.
 \begin{code}
   mkClosure :: Name -> Q Exp
 \end{code}
@@ -1097,15 +1108,15 @@ so the net result is just as if we had written
 \begin{code}
   sf ch x = sendChan ch (add1__closure x)
 \end{code}
-What is \textt{add1__closure}?  It is a new top-level definition
-added by the Template Haskell splice \textt{$(remotable ['add1])}.
+What is \textt{add1__closure}?  It is a new top-level function
+created by the Template Haskell splice \textt{$(remotable ['add1])}.
 \begin{code}
   remotable :: [Name] -> Q [Dec]
 \end{code}
 This splice expands to the following definitions
 \begin{code}
   add1__closure :: Int -> Closure Int
-  add1__closure x = MkClosure (MkS "M.add1") (encode x)
+  add1__closure x = MkClosure (MkS "M.add1")(encode x)
 
   add1__dec :: ByteString -> Int -> Int
   add1__dec bs = add1 (decode bs)
@@ -1113,24 +1124,24 @@ This splice expands to the following definitions
   __remoteTable :: [(String, Dynamic)]
   __remoteTable = [("add1", toDyn add1__dec)]
 \end{code}
-We will see how these definitions work next.
+Next we see how these definitions work.
 
 \subsection{How it works}
 
-We fake the \textt{Static} type by a simple string, which will serve as the 
-label of the function to call at the other end
+We fake the \textt{Static} type by a string, which will serve as the 
+label of the function to call in the remote process.
 \begin{code}
   newtype Static a = MkS String
 \end{code}
-We maintain a table in the \textt{ProcessM} monad, that maps these strings
-to the appropriate implementation composed with the environment deserializer,
-\texttt{add1\_\_dec} in our example.
-This table is initialised by the call to \textt{runRemote} which initialises the
-\textt{ProcessM} monad, and the table may be consulted from within the monad:
+We maintain a table in the \textt{ProcessM} monad that maps these strings
+to the appropriate implementation function composed with the environment deserializer, which in our example is
+\texttt{add1\_\_dec}.
+This table is initialised by the call to \textt{runRemote} that initialises the
+\textt{ProcessM} monad; the table may be consulted from within the monad:
 \begin{code}
   runRemote    :: Maybe FilePath
-               -> [[(String,Dynamic)]
-               -> ProcessM () -> IO ()
+                   -> [(String,Dynamic)]
+                       -> ProcessM () -> IO ()
   lookupStatic :: Typeable a => String -> ProcessM a
 \end{code}
 The \textt{lookupStatic} function looks up the function in the table,
@@ -1143,7 +1154,7 @@ process crashes, consistent with Erlang's philosophy of crash-and-recover.
 Tiresomely, the programmer has the following obligations:
 \begin{itemize}
 \item In each module, write one call \textt{$(remotable [...])},
-passing a list of all the functions passed to \textt{mkClosure}.
+passing as the list argument the names of all of the functions provided as arguments to \textt{mkClosure}.
 \item In the call to \texttt{runRemote}, pass a list
 a list of all the \textt{\_\_remoteTable} definitions, imported from
 each module that has a call to \textt{remotable}.
@@ -1154,8 +1165,8 @@ a little less convenient for the programmer:
 \begin{code}
   unClosure :: Typeable a => Closure a -> ProcessM a
   unClosure (MkClosure (MkS s) env)
-    = do { f <- lookupStatic s
-         ; return (f env) }
+        = do { f <- lookupStatic s
+             ; return (f env) }
 \end{code}
 
 
@@ -1395,32 +1406,37 @@ a little less convenient for the programmer:
 \section{Implementation}
 %: \label{s:Implementation}
 \label{s:Implementation}
-The framework has been tested with recent versions of the Glasgow Haskell Compiler (GHC). Since it uses some advanced features of GHC that aren't yet available in other compilers, we expect it to support only GHC for the near future.
+Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compiler (GHC). Since it uses some advanced features of GHC that aren't yet available in other compilers, we expect to support only GHC for the near future.
 
 Some of the features used in the framework include:
 
 \begin{itemize}
-\item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; that is, each incoming network connection is handled by forking a new thread.
-\item The implementation for the \textt{mergePorts} family of function was tricky to implement. It would have been simple, and wrong, to just fork a separate thread to call \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition: imagine what would happen if messages are received simultaneously on two threads and extracted concurrently. Only one can be returned, and because there's no way to put messages back in the channel in the original order, we would need to either re-order the message or discard it.
+\item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; 
+each incoming network connection is handled by forking a new thread.
+\item The \textt{mergePorts} family of function was tricky to implement. It would have been simple, and wrong, to fork separate threads that called \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition. 
+Imagine what would happen if messages are received concurrently on two ports and extracted concurrently by two threads. Only one of the messages can be returned;  because there is no way to put a message back into the channel in the original order, we would need to either re-order the channel (breaking the FIFO property) or discard the message (breaking reliability).
 
-Haskell's Software Transactional Memory (STM) helps us with this. STM provides a mechanism to compose receive transactions on individual message queues. 
-\item The compile-time Template Haskell suite was used to write \textt{remotable}, which automatically generates code necessary to invoke remote functions.
+Haskell's Software Transactional Memory (\textt{STM}) helps us solve this problem elegantly.
+\textt{STM} provides a mechanism to compose receive transactions on individual message queues in a way that ensures that only one commits.
+\item Template Haskell was used to write the functions \textt{mkClosure} and \textt{remotable}, which automatically generate code necessary to invoke remote functions, as described in Section~\ref{s:faking}.
 \end{itemize}
 
 \subsection{Dynamic code update} \label{s:code-update}
 
-Erlang has a nice feature that allows program modules to be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without even having to restart the application. We decided not to go in this direction with our framework, partly because code update is a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, where Erlang's bytecode interpreter retains more control over the loading and execution of programs.
+Erlang has a nice feature that allows program modules to be updated over the wire. So, when a new version of code is released, it can be transmitted to every host in the network, where it will replace the old version of the code, without having to restart the application. We decided not to go in this direction with our framework, partly because code update is a problem that can be separated from the other aspects of building a distributed computing framework, and partly because solving it is hard. The hardness is especially prohibitive in Haskell's case, which compiles programs to machine code and lets the operating system load them, whereas Erlang's bytecode interpreter retains more control over the loading and execution of programs.
 
-A disadvantage of missing the dynamic updating is that code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes the responsibility on the programmer to ensure that all hosts are running the same version of the compiled executable. Because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that share message types with different structure would most likely crash the deserializing process.
+Because we have not implemented dynamic code update, Cloud Haskell code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes on the programmer the responsibility to ensure that all hosts are running the same version of the compiled executable.  Because \textt{TypeRep}s are nominal, and because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that use the same name to refer to message types with different structure would most probably crash the deserializing process.
 
-\section{Example}
-As a practical example, we present a complete, albeit trivial, example of a distributed application. The application provides a remote counter, which can be incremented and queried by a client process. This example mirrors a similar example in Erlang, presented in ???? \je{what was the name of that book?}. We'll discuss every necessary step to actually get results from this example, including the configuration and deployment process.
+\section{A complete Cloud Haskell Application}
+As a practical example, we present a complete, albeit trivial, example of a distributed application. 
+The application provides a remote counter, which can be incremented and queried by a client process; it is based on an Erlang program, presented by Armstrong and colleagues~\cite{Erlang93}. 
+We'll discuss every step necessary to actually get results from this example, including the configuration and deployment processes.
 
-Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle run several nodes of a distributed application on a single computer, the benefits of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which you'll deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \texttt{acs-01} and \texttt{acs-02}.
+Deploying a distributed application involves creating several nodes and making sure that those nodes can communicate. Each running instance of the program creates a new node. While one could in principle multiplex several nodes of a distributed application on a single physical computer, the benefits and challenges of distributed computing are more apparent when the application is running on several computers connected by a network. There are innumerable possible network configurations, and we'll address only the relatively simple case of a local TCP network with no firewall. We'll assume that each computer on which we deploy the application has a unique name. This example only needs two computers, and we assume that those computers are named \textt{acs-01} and \textt{acs-02}.
 
-The framework supports several configuration options, only a few of which are useful in the general case. These options can be set in a configuration file, which is loaded by the program, or on the command line of the program. Here, we'll describe how to create a suitable configuration file.
+Cloud Haskell supports several configuration options, only a few of which are necessary here. These options can be set in a configuration file, which is loaded by the program, or on the command line. Here, we'll describe how to create a suitable configuration file.
 
-The example application distinguishes two kinds of nodes: the {\em worker} node will initially wait passively for instruction, whereas the {\em master} node will find a worker node, spawn a thread on it, and use it to compute. Even though all nodes have to run the same program, their initial action is determined by this attribute, which we call their {\em role}. The role of a node is simply a string, which is part of the per-node configuration. This application looks for a configuration file named \texttt{config} in the current directory.
+The example application distinguishes two kinds of nodes: the {\em worker} node will initially wait passively for instruction, whereas the {\em master} node will find a worker node, spawn a thread on it, and use it to compute. Even though all nodes have to run the same program, their initial action is determined by this attribute, which we call their {\em role}. The role of a node is simply a string, which is part of the per-node configuration. This application looks for a configuration file named \textt{config} in the current directory.
 
 We arbitrarily select the computer \texttt{acs-01} to host the master node, and the computer \texttt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
 
@@ -1430,6 +1446,7 @@ cfgHostName acs-01
 cfgKnownHosts acs-01 acs-02
 \end{lstlisting}
 
+\noindent
 And here is the configuration file for \textt{acs-02}:
 
 \begin{lstlisting}
@@ -1440,17 +1457,22 @@ cfgKnownHosts acs-01 acs-02
 
 The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} option should match the name by which the host is accessible on the network. The \textt{cfgKnownHosts} option sets a list of hosts where nodes might be running. The \textt{getPeers} function uses the value of \textt{cfgKnownHosts} to contact any running nodes on each of the named machines. \textt{getPeers} will then return a \textt{PeerInfo}, which can be examined with \textt{findPeerByRole} to see what other nodes are available on the network.
 
-Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will try to query its value from the operating system. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to automatically discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications works in as many networks as possible, it's safer to explicitly set these values.
+Of the three options given in the above configuration files, only \textt{cfgRole} is strictly necessary. If \textt{cfgHostName} isn't specified, the framework will ask the operating system for it. Also, \textt{cfgKnownHosts} is optional, because \textt{getPeers} will try to discover peers on the local network via UDP broadcast. Nevertheless, to ensure that the example applications runs on as many networks as possible, it's safer to explicitly set these values.
 
-\je{Should I talk about other, less useful configuration options?}
+%\je{Should I talk about other, less useful configuration options?}
+%\apb{no}
 
 Once the configuration file and binary executable have been distributed to both of the hosts, we can run the program. Because the master node expects that the worker node will already be available, we start the program on the worker node first.
 
 Here's the code for the example application:
-
+\apb{I don't like omitting stuff here, certainly not the Serializable declaration for CounterMessage}
 % maybe do fgrep example too? 
 
-\begin{lstlisting}[numbers=left,language=Haskell,escapeinside={\%}{\^^M}]
+\begin{lstlisting}[numbers=left,
+			numberstyle=\tiny,
+			language=Haskell,
+			escapeinside={\%}{\^^M},
+			stringstyle=\ttfamily]
 module Main where
 -- omitted: module imports
 data CounterMessage = CounterQuery ProcessId %\label{c_type}
@@ -1467,10 +1489,8 @@ counterLoop val
     counterCommand (CounterQuery pid) 
       = do { send pid val
            ; return val }
-    counterCommand CounterIncrement 
-      = return (val+1)
-    counterCommand CounterShutdown
-      = terminate
+    counterCommand CounterIncrement = return (val + 1)
+    counterCommand CounterShutdown = terminate
 
 $( remotable ['counterLoop] )
 
@@ -1489,7 +1509,8 @@ query counterpid =
 go "MASTER" = % \label{c_master}
   do { aNode <- liftM (head . flip %\label{c_getpeer}
          findPeerByRole "WORKER") getPeers
-     ; cpid <- spawn aNode ($(mkClosure 'counterLoop) 0)
+     ; cpid <- spawn aNode %\label{c_spawn}
+                     ($(mkClosure 'counterLoop) 0)
      ; increment cpid % \label{c_inc1}
      ; increment cpid % \label{c_inc2}
      ; newVal <- query cpid % \label{c_query}
@@ -1504,17 +1525,23 @@ main = runRemote (Just "config") %\label{c_init}
 \end{lstlisting}
 % $
 
-When the program starts, it first calls Cloud Haskell's \je{I am still not totally sold on this name} function \textt{runRemote} (line \ref{c_init}), which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}. Note also that \textt{runRemote} is given a list of function lookup tables, generated by \textt{remotable}. Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} in order to be able to invoke closures. These lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
+When the program starts, it first calls Cloud Haskell's 
+%\je{I am still not totally sold on this name} 
+function \textt{runRemote} (line \ref{c_init}), which is responsible for reading the configuration file, starting system services, and finally starting the main application-level process, which in this case is named \textt{go}.
+Notice that \textt{runRemote} is given a list of function lookup tables, one for each module; these tables are generated by \textt{remotable}. 
+%Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
+The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is split into two parts: one, on line \ref{c_master}, which will run on the node designated as master, and one on line \ref{c_slave}, which will run on the node designated as worker. In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
+The \textt{go} function is split into two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
+In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
-\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which is given on lines \ref{c_q}, \ref{c_i}, and \ref{c_t}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
+\textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which is given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
 
 Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
 
 \section{Performance}
 
-One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans algorithm.
+One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm.
 
 1,000,000 2-dimensional points
 
