@@ -911,7 +911,8 @@ top-level binding for the identity function:
   id x = x
 \end{code}
 Because the function \textt{id} is top-level, its binding
-in $\Gamma$ will have $\delta=\textsf{S}$, in other words \textt{id} $:_{\textsf{S}}$ \textt{a->a}. However, ($\!$\textt{Static id}) has type ($\!$\textt{Static (a -> a)}).
+in $\Gamma$ will have $\delta=\textsf{S}$, in other words \textt{id} has the
+non-\textt{Static} type \textt{id} $:_{\textsf{S}}$ \textt{a->a}. However, ($\!$\textt{Static id}) has type ($\!$\textt{Static (a -> a)}).
 
 \item A variable with a \textsf{D} binding may have a \textt{Static} type.  For example
 \begin{code}
