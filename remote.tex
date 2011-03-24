@@ -820,9 +820,9 @@ However, Java RMI also uses introspection to provide the programmer with fine co
 which fields are serialized (the \textt{transient} flag prevents serialization), and exactly how the data are encoded (by providing the private methods \textt{writeObject} and \textt{readObject}); it also allows the programmer to take control of the whole serialization process by implementing the \textt{Externalizable} interface, which means implementing the \textt{writeExternal} and \textt{readExternal} methods by hand. 
 As a consequence, Java RMI avoids the three disadvantages listed above, while still automating serialization for simple data objects.
 
-\apb{Simon, I believe that you changed the next paragraph, but perhaps you forgot to push the changes?}
-
-Without reflection, these options are not open to us.  
+For deserialisation, the Java approach depends crucially on the \emph{runtime} ability
+to take an arbitrary type representation and cough up a deserialiser for that type.
+Haskell lacks this ability so this option is not open to us.
 Building-in serializability of every value is
 too big a primitive.  We do need \emph{some} built-in support, but
 we seek something more more modest.  Proposing such a mechanism for a language without reflection is one of 
@@ -978,7 +978,7 @@ that, at the receiving end, we do not know the type captured inside
 the closure, so we do not know whch deserializer to use.  This initially
 appears to be a very awkward problem indeed. Maybe we have to send a 
 representation of the environment type, and do a run-time type-class lookup
-at the receiving end?  This solution is used by Clean \cite{clean}.  Maybe
+at the receiving end?  Maybe
 we could send some representation of the deserialization function itself?
 But that seems to require a solution to the problem of serializing 
 closures, so an infinite regress beckons.
@@ -1574,6 +1574,11 @@ The performance of \kmeans{} under Cloud Haskell does not compare favorably with
 
 \section{Related work} \label{s:related}
 
+As should be clear, our main inspiration comes from Erlang, whose tremendous
+success for distributed programming led us to emulate its best features.
+A second inspiration is the Ciel execution engine and Skywriting language
+of Murray \emph{et al} \cite{Murray2010, Murray2011}.
+
 In scientific computing, the most scalable solution for distributed parallel computation is the Message Passing Interface (MPI). As its name suggests, MPI is similar to our framework in its preference for communication by messages. Unlike our framework, MPI is language-independent; interfaces are available for Fortran, C, and C++, and an array of different implementations have been optimized for a variety of supercomputer architectures.  In comparison, Cloud Haskell, as a DSL embedded in Haskell, is not easily available from other languages.
 This is of course a weakness, but it is also a great strength.  
 Haskell's type system separates shared-memory concurrency, distributed-memory concurrency and pure computation, giving programmers powerful reasoning tools that are not available when using a subroutine library called from a language with a weaker type system. 
@@ -1610,15 +1615,23 @@ programming, including serialization of function values.  Like Actue
 it uses explicit type passing, the details of how the free variables
 of function closures are marshalled are hazy.  Rossberg's language
 Alice likewise supports type-safe distributed programming
-\cite{rossberg:alice}.  Again, functions closures may be serialised,
-but that is regarded as a built-in service of the runtime system.
+\cite{rossberg:alice}.  
+The Clean language supports type-safe saving of arbitrary values (including
+function closures into files \cite{clean:dynamic-io}, and in a recent
+paper proposes a mechanism for runtime solving of class constraints 
+\cite[Sect 4.2]{clean:wgp10}.
 
-Every one of these systems fundamentally regards serialization of closures
+All of these systems fundamentally regard serialization of closures
 as a built-in service.  In contrast, our work puts the programmer in
 complete control of serialization, via the usual type-class mechanism.
-Exposing conversion is a significant burden, but one allows the programmer to reason about the cost of sending a message.
-The burden can in any case be ameliorated with syntactic sugar.
-
+Exposing closure conversion is a significant burden --- albeit one that can be
+relieved with some syntactic sugar --- but one allows the
+programmer to reason about the cost of sending a message.
+Similarly, explicit serialization will typically lose structure 
+sharing within a transmitted value, whereas a built-in mechanism can retain it
+--- but that is also true of any traversal of a data structure.
+We do not argue that our approach is always better, but rather that it offers
+a new and unexplored design point.
 
 \section{Conclusions and Future Work}
 %: \label{s:futureWork}
@@ -1628,7 +1641,6 @@ However, as yet it is no more than this: we have a lot of work left to do to mak
 
 Our ongoing work is on two levels.
 At the lower level, we plan to implement \textt{Static} and the corresponding type inference rules in GHC.  This will remove the need for the workarounds described in Section~\ref{s:faking}.
-
 At the higher level, we have designed a framework that builds on the interface described here.
 In it, the main unit of abstraction changes from the process to the \emph{task}: an idempotent, restartable block of code that produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
 
