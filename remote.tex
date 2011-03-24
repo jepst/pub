@@ -852,7 +852,7 @@ It is helpful to remember this intuition: \emph{the defining property of
 a value of type \emph{\textt{(Static} $\tau$)} is that it can be serialized},
 and moreover, that it can be serialized without knowledge of how to serialize $\tau$.
 Operationally, the implementation serializes a \textt{Static} value by first evaluating it,
-and then serializing the code label in the result of the evaluation.
+and then serializing the code label for the result of the evaluation.
 Perhaps surprisingly, this works not only for functions, but also for data values of a type like \textt{Static Tree}.
 For these we simply statically allocate the \textt{Tree} value (at compile time), and pass the label of its root.
 %In fact, we do the same for functions, passing the label of its 
