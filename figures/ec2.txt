@@ -1,0 +1,44 @@
+# ./MakeData big 100000
+# ./awsgo -k eppie-aws -m 10 -n 1 -p 1
+# Converged in 4 iterations and 7851.69046s
+
+# ./MakeData big 50000
+# ./awsgo -k eppie-aws -m 20 -n 1 -p 1
+# Converged in 4 iterations and 2942.910478s
+
+# ./MakeData big 33333
+# ./awsgo -k eppie-aws -m 30 -n 1 -p 1
+# Converged in 4 iterations and 1519.769177s
+
+# ./MakeData big 25000
+# ./awsgo -k eppie-aws -m 40 -n 1 -p 1
+
+# ./MakeData big 20000
+# ./awsgo -k eppie-aws -m 50 -n 1 -p 1
+# Converged in 4 iterations and 854.052182s
+
+# ./MakeData big 16666
+# ./awsgo -k eppie-aws -m 60 -n 1 -p 1
+#  Converged in 4 iterations and 682.806229s
+
+# ./MakeData big 14285
+# ./awsgo -k eppie-aws -m 70 -n 1 -p 1
+# Converged in 4 iterations and 644.469844s
+
+# ./MakeData big 12500
+# ./awsgo -k eppie-aws -m 80 -n 1 -p 1
+# Converged in 4 iterations and 565.309287s
+
+# ./MakeData big 11111
+# ./awsgo -k eppie-aws -m 90 -n 1 -p 1
+# Converged in 4 iterations and 490.445704s
+
+10 7851.69046
+20 2942.910478
+30 1519.769177
+40 1149.000583
+50 854.052182
+60 682.806229
+70 644.469844
+80 565.309287
+90 490.445704

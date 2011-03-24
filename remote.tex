@@ -30,10 +30,12 @@
 \usepackage{amssymb}
 \usepackage{listings}
 \usepackage[pdftex]{graphicx}
+\usepackage{epsfig}
 \usepackage{verbatim} % only for comment environment
 \usepackage{ifthen}
 \usepackage{needspace}
 \usepackage{url}
+
 \urlstyle{sf}
 
 \graphicspath{{figures/}}
@@ -1431,7 +1433,9 @@ Erlang has a nice feature that allows program modules to be updated over the wir
 
 Because we have not implemented dynamic code update, Cloud Haskell code needs to be distributed to remote hosts out of band. In our development environment this was usually done with \textt{scp} and similar tools. Furthermore, this imposes on the programmer the responsibility to ensure that all hosts are running the same version of the compiled executable.  Because \textt{TypeRep}s are nominal, and because we don't make any framework-level provision for rectifying incompatible message types, sending messages between executables that use the same name to refer to message types with different structure would most probably crash the deserializing process.
 
-\section{A complete Cloud Haskell Application}%: \label{s:completeApp}\label{s:completeApp}
+\section{A complete Cloud Haskell Application}
+%: \label{s:completeApp}
+\label{s:completeApp}
 As a practical example, we present a complete, albeit trivial, example of a distributed application. 
 The application provides a remote counter, which can be incremented and queried by a client process; it is based on an Erlang program, presented by Armstrong and colleagues~\cite{Erlang93}. 
 We'll discuss every step necessary to actually get results from this example, including the configuration and deployment processes.
@@ -1544,36 +1548,27 @@ The type of these commands is declared on line \ref{c_type}, and each command ha
 
 Notice that it's not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it's impossible to create a race condition on the counter.
 
-\section{Performance}%: \label{s:performance}\label{s:performance}
+\section{Performance}
+%: \label{s:performance}
+\label{s:performance}
 
-One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm.
+One goal of a distributed system is to be able coordinate compute- and data-intensive algorithms among many nodes without incurring a performance overhead. Here we discuss the performance of our implementation of the \kmeans{} algorithm. The algorithm is used to identify natural clusters within sets of data points; its input is a set of data points, and its output is an assignment of each data point to one of $k$ clusters.
 
-1,000,000 2-dimensional points
+The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}. The full set of data points is divided evenly between the mappers. Each mapper then calculates the distance between each of its assigned data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The assignments are collected by the reducer nodes and are used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm until either the centroids stop changing or the maximum number of iterations is reached.
 
-EC2
+Because \kmeans{} is computationally demanding, data intensive, and can be easily partitioned into compute units, we feel that it is an ideal test case for Cloud Haskell. We implemented the \kmeans{} algorithm on top of our framework and deployed it to an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input. Each node was executed on an Amazon instance of type \texttt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of \kmeans{} iterations to five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
-simple configure script, generates config file
+\begin{figure}[t]
+\centerline {
+ \includegraphics[width=\columnwidth]{ec2}
+}
+\caption{ 
+\label{fig:performance1}
+The performance of the \kmeans{} algorithm as implemented in Cloud Haskell. The input data set was one million 100-dimensional data points. The number of reducer nodes was fixed at 1 for all tests. Performance improves at a better than linear rate as we increase the number of mapper nodes.
+}
+\end{figure}
 
-pretty graphs
-
-possibly measure utilization as well?
-
-\begin{center}
-\begin{table}[h]
-
-\begin{tabular}{l r}
-\hline
-  \# mappers & Time (s) \\
-  2 & 702 \\
-  4 & 507 \\
-  8 & 428 \\
-  16 & 390 \\
-  32 & 352 \\
-\hline
-\end{tabular}
-\end{table}
-\end{center}
-
+The performance of \kmeans{} under Cloud Haskell does not compare favorably with systems such as Skywriting. Although the time needed to execute the algorithm reduces significantly as we add worker nodes, performance as an absolute is disappointing. We hope to partially remedy this situation with the improved process allocation to be introduced in our task layer, discussed in Section \ref{s:futureWork}.
 
 % Isis/Paxos/virtual synchrony consensus?
 
@@ -1646,7 +1641,7 @@ We hope that the task layer will provide functionality similar to well-known dis
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
-Jeff Epstein would like to give great thanks go to Alan Mycroft for his support and helpful feedback. 
+Jeff Epstein would like to thank Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
 
