@@ -657,7 +657,7 @@ do { send pid (Query stuff)
    ; ret <- receiveTimeout 50000
        [ match(\(Response answer) -> 
             return answer)  ]
-   ; case res of
+   ; case ret of
        Nothing -> showError "Timeout!"
        Just ans -> showAnswer ans  }
 \end{code}
@@ -1511,7 +1511,7 @@ query :: ProcessId -> ProcessM Int %\label{c_q}
 query counterpid =
   do { mypid <- getSelfPid
      ; send counterpid (CounterQuery mypid)
-     ; receiveWait [match return] }
+     ; expect }
 
 go "MASTER" = % \label{c_master}
   do { aNode <- liftM (head . flip %\label{c_getpeer}
@@ -1659,7 +1659,7 @@ We particularly thank John Launchbury who helped us see that $\text{\tt Static}\
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  John Hughes helped us to understand some details of Erlang, and we enjoyed discussing with him how to express Erlang's computational model in Haskell. Koen Claessen
 insightfully pointed out the importance of not making receive ports serializable.
-Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical;
+Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
 Jeff Epstein thanks Alan Mycroft for his support and helpful feedback. 
 
 % The bibliography should be embedded for final submission.
