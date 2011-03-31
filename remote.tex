@@ -1502,7 +1502,7 @@ counterLoop val
 $( remotable ['counterLoop] )
 
 increment :: ProcessId -> ProcessM () %\label{c_i}
-increment cpid = send cpid CounterIncremetn
+increment cpid = send cpid CounterIncrement
 
 shutdown :: ProcessId -> ProcessM () %\label{c_t}
 shutdown cpid = send cpid CounterShutdown
