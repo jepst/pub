@@ -541,7 +541,7 @@ It is certainly possible to create a message type that represents the sum of all
 
 \begin{code}
 data MathOp = Add ProcessId Double Double
-            | Divide ProcessId Double double
+            | Divide ProcessId Double Double
             | Answer Double
             | DivByZero
 \end{code}
@@ -1554,7 +1554,7 @@ One goal of a distributed system is to be able coordinate compute- and data-inte
 
 The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}; the data points are divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-\kmeans{} is computationally demanding, data intensive, and easilly partitioned, and so provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+\kmeans{} is computationally demanding, data intensive, and easily partitioned, and so provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
