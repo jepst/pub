@@ -288,7 +288,7 @@ If there is no message of the appropriate type on the queue, \textt{expect} wait
 When we said that the data to be transmitted must be serializable, we meant that each item must implement the \textt{Serializable} type class.  This ensures two properties: that it is \textt{Binary} and that it is \textt{Typeable} (see Figure~\ref{fig:api}: Type classes).
 \textt{Binary} means that \textt{put} and \textt{get} functions are available to encode and decode the data item into binary form and back again; \textt{Typeable} means that a function \textt{typeOf} can be used to produce a \textt{TypeRep} that captures the item's type.  
 
-While all of Haskell's primitive data types and most of the common higher-level data structures are \textt{Serializable}, and can therefore be part of a message, some data types are emphatically \emph{not} serializable. 
+While all of Haskell's primitive data types and most of the common higher-level data structures are \textsf{Serializable}, and can therefore be part of a message, some data types are emphatically \emph{not} serializable. 
 One example is \textt{MVar}, the type of Haskell's mutable concurrent variables. Since \textt{MVar}s allows communication between threads on the assumption of shared memory, it isn't helpful to send an \textt{MVar} to a remote process that may not share memory with the current process. 
 Although one can imagine a synchronous distributed variable that mimics the semantics of an \textt{MVar}, such a variable would have a vastly different cost model from a normal \textt{MVar}. 
 Since neither \textt{MVar}'s cost model nor its implementation could be preserved in an environment that required communication between remote systems, we  prohibit programmers from using \textt{MVar}s in that way.  
@@ -696,7 +696,7 @@ ping2 :: SendPort Ping -> ReceivePort Pong -> ProcessM ()
 ping2 pingout pongin = 
    do { (Pong partner) <- receiveChan pongin
       ; sendChan partner (Ping pongin) 
-      ; ping pingout pingin }
+      ; ping2 pingout pongin }
 \end{code}
 
 
@@ -749,7 +749,7 @@ To understand this problem more deeply, let's digress for a moment and consider 
   	(x:xs) == (y:ys) = x == y && xs == ys
 \end{code}
 This says that, provided that \textt{Eq a} holds, we can make \textt{Eq [a]} hold.
-\textt{Eq a} means that the equality operator \textt{==} is defined on values of type \textt{a}.  Analogously, \textt{Eq [a]} means that the equality operator is defined on values of type \textt{[a]}: indeed, the second line above defines it.
+\textt{Eq a} means that the equality operator \textsf{=\!=} is defined on values of type \textt{a}.  Analogously, \textt{Eq [a]} means that the equality operator is defined on values of type \textt{[a]}: indeed, the second line above defines it.
 This works because equality is a structural property of the types: we know that we can define equality on a list exactly when we have an equality on the elements of that list.
 
 Now lets get back to the problem at hand: specifying that a function is serializable.
