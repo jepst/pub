@@ -996,7 +996,7 @@ data Closure a where   -- Right
 									ByteString -> Closure a
 \end{code}
 Although this may sound draconian, it is perfectly general, because any environment  that is serializable is equipped with \textt{encode} and \textt{decode} functions that will convert it to and from a \textt{ByteString}. 
-In effect, this makes the  correct deserializer becomes part of the static code pointer in the closure.  Simple but effective.
+In effect, this makes the  correct deserializer part of the static function in the closure.  Simple, but effective.
 
 It is easy to un-closure-convert: we just apply the function to the environment.
 \begin{code}
