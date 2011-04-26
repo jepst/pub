@@ -1630,12 +1630,11 @@ the idea is as yet not implemented
 All of these systems fundamentally regard serialization of closures
 as a built-in service.  In contrast, our work puts the programmer in
 complete control of serialization, via the usual type-class mechanism.
-Exposing closure conversion is a significant burden --- albeit one that can be
-relieved with some syntactic sugar --- but one allows the
-programmer to reason about the cost of sending a message.
+Exposing closure conversion is a significant burden\,---\,albeit one that can be
+relieved with some syntactic sugar.  The payoff is that the 
+programmer can reason about the cost of sending a message.
 Similarly, explicit serialization will typically lose structure 
-sharing within a transmitted value, whereas a built-in mechanism can retain it
---- but that is also true of any traversal of a data structure.
+sharing within a transmitted value, whereas a built-in mechanism can retain it\,---\,but that is also true of any traversal of a data structure.
 We do not argue that our approach is always better, but rather that it offers
 a new and unexplored design point.
 
