@@ -176,7 +176,7 @@ we don't innovate in this area, but adopt Erlang's solution (summarized in Secti
 If Erlang has been so successful, you may wonder what Haskell brings to the table. 
 The short answer is: purity, types, and monads. 
 As a pure functional language, data is by default immutable, so the lack of shared, mutable data won't be missed. 
-Importantly, immutability allows the implementation decide whether to share or copy the data: the choice is semantically invisible, and so can depend on the locations of the processes. 
+Importantly, immutability allows the implementation to decide whether to share or copy the data: the choice is semantically invisible, and so can depend on the locations of the processes. 
 Moreover, pure functions are idempotent; this means that functions running on failing hardware can be restarted elsewhere without the need for distributed transactions or other mechanisms for ``undoing'' effects.  
 Types in general, and monadic types in particular, help to guarantee properties of programs statically.  
 For example, a function that has an externally-visible effect such as sending or receiving a message \emph{cannot} have the same type as one that is pure.
@@ -779,7 +779,7 @@ The second argument of \textt{spawn}, the code that we want to run on the remote
 its free variables, \textt{s}, which is bound to the \textt{sendPort} on which
 the remote process should send back the answer.
 Thus, serializing this argument requires serializing a function with a free variable.
-We can't avoid this problem, because the essence of distributed computation is providing a a function like \textt{spawn} that starts a remote computation; in a higher-order language like Haskell, that must inevitably
+We can't avoid this problem, because the essence of distributed computation is providing a function like \textt{spawn} that starts a remote computation; in a higher-order language like Haskell, that must inevitably
 involve serializing a closure of some kind.
 
 \subsection{Prior Solutions}
@@ -824,7 +824,7 @@ to take an arbitrary type representation and cough up a deserializer for that ty
 Haskell lacks this ability so this option is not open to us.
 Yet, as we argue above, building-in serializability of every value is
 too blunt an instrument.  We do need \emph{some} built-in support, but
-we seek something more more modest.  Proposing such a mechanism for a language without reflection is one of 
+we seek something more modest.  Proposing such a mechanism for a language without reflection is one of 
 the main contributions of this paper.
 
 \subsection{Static values}
@@ -1114,7 +1114,7 @@ for the (quoted) name of the \textt{add1} function.
 The splice expands to a call to \textt{add1__closure}, 
 so the net result is just as if we had written
 \begin{code}
-  sf ch x = sendChan ch (add1__closure x)
+  sendFunc ch x = sendChan ch (add1__closure x)
 \end{code}
 What is \textt{add1__closure}?  It is a new top-level function
 created by the Template Haskell splice \textt{$(remotable ['add1])}.
@@ -1657,7 +1657,7 @@ We hope that the task layer will provide functionality similar to well-known dis
 We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  John Hughes helped us to understand some details of Erlang, and we enjoyed discussing with him how to express Erlang's computational model in Haskell. Koen Claessen
-insightfully pointed out the importance of not making receive ports serializable.
+insightfully pointed out the importance of not making receive ports serializable. Thomas van Noort provided some needed editing.
 Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
 Jeff Epstein thanks Alan Mycroft for his support and helpful feedback. 
 
