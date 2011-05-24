@@ -526,7 +526,7 @@ math() ->
 \label{erl_math}
 
 This code will accept and respond to several different messages. It does this by pattern matching on the values of the messages, which are (by convention) all tuples. Each pattern has a corresponding message-handling action. 
-Line \ref{erl_addmatch} attempts to matches a tuple containing the atom \textt{add}, a process ID, and two numbers; when it finds a message of that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends back the sum of the two numbers. 
+Line \ref{erl_addmatch} attempts to match a tuple containing the atom \textt{add}, a process ID, and two numbers; when it finds a message of that form, it will invoke the corresponding handler on line \ref{erl_addhandler}, which sends back the sum of the two numbers. 
 In the next pattern, on line \ref{erl_divmatch}, the code responds to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the \textt{when} syntax. 
 Finally, the third pattern (line \ref{erl_nonzero}) will send back a \textt{div_by_zero} atom in response to all messages not matched by the previous patterns, which is to say, those cases when the divisor is zero.
 Patterns are tested against each message in the order that they appear, so that the last pattern will be reached only if the first two fail to match.
