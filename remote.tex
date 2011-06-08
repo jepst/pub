@@ -136,7 +136,7 @@
 % 2. What does it matter?
 % 3. What's the solution?
 % 4. What are the consequences?
-We present Cloud Haskell, a domain-specific language for developing programs for a distributed-memory computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
+We present Cloud Haskell, a domain-specific language for developing programs for a distributed computing environment. Implemented as a shallow embedding in Haskell, it provides a message-passing communication model, inspired by Erlang, without introducing incompatibility with Haskell's established shared-memory concurrency. A key contribution is a method for serializing function closures for transmission across the network.
 Cloud Haskell has been implemented; we present example code and some preliminary performance measurements.
 
 \end{abstract}
@@ -1591,7 +1591,7 @@ Haskell's type system separates shared-memory concurrency, distributed-memory co
 There have been lots of mechanisms for executing functions on remote
 systems, staring with Birrell and Nelson's RPC~\cite{birrel1984}.
 Specific to Java is the Remote Method Invocation (RMI) mechanism
-\cite{javarmi}. CORBA proides the Interface Description Language (IDL)
+\cite{javarmi}. CORBA provides the Interface Description Language (IDL)
 \cite{corbaidl} to define implementation-language-independent remote
 functions. Web services often use the SOAP standard to implement
 remote procedure call.  However, none of these mechanisms deal with the problem of transmitting first-class functions that capture their environment.
