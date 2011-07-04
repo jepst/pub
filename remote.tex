@@ -17,7 +17,7 @@
 %-----------------------------------------------------------------------------
 
 
-\documentclass[preprint]{sigplanconf}
+\documentclass{sigplanconf}
 
 
 % The following \documentclass options may be useful:
@@ -57,9 +57,14 @@
 \newcommand\je[1]{\nb{jeff}{#1}}
 
 \begin{document}
+\conferenceinfo{Haskell'11,} {September 22, 2011, Tokyo, Japan.}
+\CopyrightYear{2011}
+\copyrightdata{978-1-4503-0860-1/11/09}
 
-\lstset{language=Haskell, basicstyle=\footnotesize, numbers=none, numberstyle=\footnotesize, stepnumber=1, numbersep=5pt, showspaces=false, showtabs=false, frame=none, tabsize=2, captionpos=b, breaklines=true, breakatwhitespace=false, xleftmargin=10pt,showstringspaces=false}
-% ,resetmargins=true,breakindent=1cm,breakautoindent=true
+
+\lstset{language=Haskell, basicstyle=\footnotesize, numbers=none, numberstyle=\footnotesize, stepnumber=1, numbersep=5pt, showspaces=false, showstringspaces=false,showtabs=false, frame=none, tabsize=2, captionpos=b, breaklines=true, breakatwhitespace=false, xleftmargin=10pt,
+keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,class,instance,import,hiding,forall,qualified,newtype,type,as}}
+
 
 % from http://www.haskell.org/haskellwiki/Literate_programming
 \lstnewenvironment{code}
@@ -82,13 +87,8 @@
                {|}{{$\mid$}}1               
     }
 
-
-\conferenceinfo{ICFP 2011}{date, City.} 
-\copyrightyear{2011} 
-\copyrightdata{[to be supplied]} 
-
-\titlebanner{Haskell for the cloud}        % These are ignored unless
-\preprintfooter{Haskell for the cloud}   % 'preprint' option specified.
+\titlebanner{Towards Haskell in the Cloud}        % These are ignored unless
+\preprintfooter{Towards Haskell in the Cloud}   % 'preprint' option specified.
 
 %\renewcommand{\textfraction}{0.05}
 %\renewcommand{\topfraction}{0.9}
@@ -117,7 +117,7 @@
 
 
 
-\title{Haskell for the cloud}
+\title{Towards Haskell in the Cloud}
 \subtitle{}
 
 \authorinfo{Jeff Epstein}
@@ -142,15 +142,15 @@ Cloud Haskell has been implemented; we present example code and some preliminary
 \end{abstract}
 
 
-%\category{D.1.3}{Programming Techniques}{Concurrent Programming---Distributed Programming}
-%\category{D.3.2}{Programming Languages}{Haskell}
+\category{D.1.3}{Programming Techniques}{Concurrent Programming---Distributed Programming}
+\category{D.3.2}{Programming Languages}{Haskell}
 %
 %
-%\terms
-%Languages, Reliability, Performance, Distribution
+\terms
+Languages, Reliability, Performance, Distribution
 %
-%\keywords
-%Haskell, Erlang, message-passing
+\keywords
+Haskell, Erlang, message-passing
 %
 \section{Introduction}
 
@@ -161,11 +161,15 @@ The message-passing model, popularized by \mbox{Erlang}\,\cite{Erlang93} for hig
 We choose this model because it makes the costs of communication apparent, and because it makes a concurrent process a natural unit of failure: since processes do not share data, the data of one process cannot be contaminated by a fault in another.
 %Of course, it is possible that a failing process sends a corrupted or misleading message, but this is a much narrower channel than the ability to write willy-nilly into another processor's memory.
 
+
 We use the term ``cloud'' to mean a large number of processors with separate memories that are connected by a network and have independent failure modes.
 We don't believe that shared-memory concurrency is appropriate for programming the cloud.
-This is because an effective programming model must be accompanied by a cost model.
+An effective programming model must be accompanied by a cost model.
 In a distributed memory system, the most significant cost, in both energy and time, is data movement.
 A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
+
+
+One reason that this model of distributed computing has not been brought to Haskell before is that it requires a mechanism to run code on remote systems. To solve this, we present a novel method for serializing function closures. Our method does not require extending the compiler, but yet provides an intuitive syntax that hides the underlying serialization mechanism from the programmer.
 
 In many ways, failure is \emph{the} defining issue of distributed computation.  
 In a network of hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
@@ -194,7 +198,7 @@ However, unlike Erlang, Cloud Haskell also allows shared-memory concurrency \emp
 \item A demonstration of the effectiveness of our approach in the form of an implementation (discussed in Sections~\ref{s:faking} and \ref{s:Implementation}), and a complete example application (Section~\ref{s:completeApp}).
 We also provide performance measurements from the $k$-means clustering algorithm, an iterative algorithm for partitioning data points into natural groups (Section~\ref{s:performance}). 
 \end{itemize}
-\pagebreak
+
 
 \section{Processes and messages}
 %: \label{s:ProcessesAndMessages}
@@ -214,7 +218,7 @@ In most respects, Cloud Haskell follows Erlang by favoring message-passing as th
 
 \begin{figure}[t]
 \centerline {
-\includegraphics[width=0.95\columnwidth]{threadsAndProcesses}
+ \includegraphics[width=0.95\columnwidth]{threadsAndProcesses}
 }
 \caption{ 
 %: \label{fig:ProcessBubbles}
@@ -228,14 +232,18 @@ Processes A and B do not share memory, even though they are running on the same 
 %: \label{s:sendAndExpect}
 \label{s:sendAndExpect}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.  The basic primitives are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
+Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
+
+Cloud Haskell provides two styles of message passing: \emph{untyped messages}, which closely follow the semantics of messages as laid out in Erlang; and \emph{typed channels}, which leverage Haskell's strong type system to provide static guarantees about the content of messages. In this section, we discuss untyped messages. We address channels in Section~\ref{s:Channels}.
+
+The primitives for untyped messaging are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
 There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}.}:
 
 \par{\small
 \begin{code}
-send :: (Serializable a) => ProcessId -> a 
+send :: Serializable a => ProcessId -> a 
 						-> ProcessM ()
-expect :: (Serializable a) => ProcessM a
+expect :: Serializable a => ProcessM a
 \end{code}}
 \noindent
 
@@ -248,10 +256,10 @@ data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
 
 ping :: ProcessM ()
-ping = do { self <- getSelfPid
-          ; Pong partner <- expect
-          ; send partner (Ping self)
-          ; ping }
+ping = do Pong partner <- expect
+          self <- getSelfPid
+          send partner (Ping self)
+          ping
 \end{code}
 
 \noindent The equivalent code in Erlang looks like this:
@@ -347,7 +355,7 @@ matchUnknown :: ProcessM q -> MatchM q ()
 \begin{code}
 spawn :: NodeId -> Closure (ProcessM ()) 
       -> ProcessM ProcessId
-call :: (Serializable a) => NodeId -> 
+call :: Serializable a => NodeId -> 
         Closure (ProcessM a) -> ProcessM a
 terminate :: ProcessM a
 getSelfPid :: ProcessM ProcessId
@@ -420,9 +428,9 @@ In combination with the \textt{ping} and \textt{pong} functions, \textt{spawn} c
 \needspace{4ex}
 \begin{code}
 -- wrong
-do { pingProc <- spawn someNode ping
-   ; pongProc <- spawn otherNode pong
-   ; send pingProc (Pong pongProc) }
+do pingProc <- spawn someNode ping
+   pongProc <- spawn otherNode pong
+   send pingProc (Pong pongProc)
 \end{code}
 
 This code is intended to start two new processes, located on \textt{someNode} and \textt{otherNode}, with each process expecting to receive messages of a particular type. To begin the exchange, we send an initial \textt{Pong} message to the ping process.
@@ -488,7 +496,7 @@ To make this possible, one process can monitor another process; if the monitored
 Ascertaining the origin of the failure and recovering from it are left to the application or a higher-level framework.
 
 A process can request to be notified in the event that another process terminates for any reason, or only in the case of a fault involving the terminating process.
-Examples of such faults are uncaught exceptions, and node on which the process is running becoming inaccessible. 
+Examples of such faults are uncaught exceptions, and the node on which the process is running becoming inaccessible. 
 Notifications can be delivered in two ways: as asynchronous exceptions, which can be caught with Haskell's usual exception handling mechanisms; or by message, which can be received like any other message.
 The choice is made by the monitoring process when monitoring is established.
 
@@ -530,7 +538,7 @@ Line \ref{erl_addmatch} attempts to match a tuple containing the atom \textt{add
 In the next pattern, on line \ref{erl_divmatch}, the code responds to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the \textt{when} syntax. 
 Finally, the third pattern (line \ref{erl_nonzero}) will send back a \textt{div_by_zero} atom in response to all messages not matched by the previous patterns, which is to say, those cases when the divisor is zero.
 Patterns are tested against each message in the order that they appear, so that the last pattern will be reached only if the first two fail to match.
-If no patterns match, the whole receive statement is repeated for the next element of the message queue, and so on until a match is found or the queue is exhausted.
+If no patterns match, the unmatched message is left in the message queue, the whole receive statement is repeated for the next message, and so on until a match is found or the queue is exhausted.
 How can we provide similar functionality in Haskell?
 
 \subsection{Receiving and Matching}
@@ -571,7 +579,7 @@ First, let's consider how to specify a pair consisting of a message type and its
 %When a message of a type acceptable to the handler function is received, \textt{match} applies the handler to that mesage. 
 
 \begin{code}
-match :: (Serializable a) => (a -> ProcessM q) -> MatchM q ()
+match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
 \end{code}
 \noindent
 When \textt{match} tests an incoming message, it compares the type of the message against the type \textt{a}, the parameter of the message handler. 
@@ -585,7 +593,7 @@ receiveWait :: [MatchM q ()] -> ProcessM q
 \end{code}
 
 How can we mimic Erlang's \textt{when} clause, which allows message acceptance to be qualified by a predicate? 
-We do this with \textt{matchIf}, whose first parameter is a predicate that is allowed to examine the incoming message without removing it from the queue.
+We do this with \textt{matchIf}, whose first parameter is a predicate that is allowed to examine the incoming message without removing it from the queue. Because this predicate is pure, it cannot alter the state of the message queue.
 
 \begin{code}
 matchIf :: Serializable a => (a -> Bool) -> 
@@ -619,10 +627,10 @@ For example, if a particular \textt{match} accepts messages of a certain type, t
 In the above example, this is okay, because the \textt{Add} type has only a single variant, built with the \textt{Add} constructor. 
 If instead it were a sum type with a second constructor, then the \textt{match} call that deals only with the \textt{Add} constructor would raise a pattern match exception if a message with the other constructor were received.
 
-Clearly, \textt{receiveWait} is more flexible than \textt{expect}. In fact, \textt{expect} is implemented in terms of \textt{receiveWait}. Its definition looks like this:
+Clearly, \textt{receiveWait} is more flexible than \textt{expect}. In fact, \textt{expect} is implemented in terms of \textt{receiveWait}. Its definition is:
 
 \begin{code}
-expect :: (Serializable a) => ProcessM a
+expect :: Serializable a => ProcessM a
 expect = receiveWait [match return]
 \end{code}
 
@@ -653,13 +661,13 @@ receiveTimeout :: Int -> [MatchM q ()] ->
 Thus we can translate the Erlang example into Haskell:
 
 \begin{code}
-do { send pid (Query stuff)
-   ; ret <- receiveTimeout 50000
-       [ match(\(Response answer) -> 
+do send pid (Query stuff)
+   ret <- receiveTimeout 50000
+     [ match(\(Response answer) -> 
             return answer)  ]
-   ; case ret of
-       Nothing -> showError "Timeout!"
-       Just ans -> showAnswer ans  }
+   case ret of
+     Nothing -> showError "Timeout!"
+     Just ans -> showAnswer ans  
 \end{code}
 %\)
 
@@ -687,16 +695,16 @@ This restriction is enforced by making \textt{SendPort} an instance of \textt{Se
 This is a deliberate design decision; as a consequence, receive ports in Cloud Haskell are more like Erlang process identifiers or TCP ports than they are like receive rights in the Accent~\cite{Rashid81} and Mach~\cite[\S4.2.3]{free-s2008} operating system kernels.   
 This decision reflects our intended execution environment, in which we expect channels to be used to communicate across a network.  
 The ability, offered by Mach, to move a receive port from one place to another can be very useful for moving responsibility for a service from one provider to another, but only if this can be done without the risk of losing messages that are in transit.  
-This is easy inside an operating system like Mach, but much less so in a distributed environment, especially when one of the prime reasons for moving a service to a new server is that the old server has crashed.  
+Although easy in an operating system like Mach, it is much less so in a distributed environment, especially when one of the prime reasons for moving a service to a new server is that the old server has crashed.  
 
 We can now reformulate our ping example to use typed channels. The \textt{ping} process is given two ports: a receive port on which to receive pongs, and a send port on which to emit pings. Each message now contains the send port on which its recipient should respond; thus the \textt{Ping} message contains the send port of a channel of pongs, and vice-versa.
 % this might not be the best example, really
 \begin{code}
 ping2 :: SendPort Ping -> ReceivePort Pong -> ProcessM ()
 ping2 pingout pongin = 
-   do { (Pong partner) <- receiveChan pongin
-      ; sendChan partner (Ping pongin) 
-      ; ping2 pingout pongin }
+   do (Pong partner) <- receiveChan pongin
+      sendChan partner (Ping pongin) 
+      ping2 pingout pongin
 \end{code}
 
 
@@ -722,14 +730,13 @@ Cloud Haskell also provides a family of \textt{combinePorts} functions that can 
 \section{Closures}
 %: \label{s:closures}
 \label{s:closures}
-\apb{We agreed to move this to between Sections~\ref{s:processes} and \ref{s:matching}.  I tried that; the problem that the first example uses Channels, which aren't introduced until Section~\ref{s:Channels}.  If I re-write the example with ProcessIds, then there is nothing for the environment to capture, and it doesn't make our point.  We could make another example, but we didn't like the \textt{printSum} example.  So I left this section in its original place.  I think that the flow is OK; the problem is that something we identify as a major contribution comes a bit late. \vspace{2ex}}
+%\apb{We agreed to move this to between Sections~\ref{s:processes} and \ref{s:matching}.  I tried that; the problem that the first example uses Channels, which aren't introduced until Section~\ref{s:Channels}.  If I re-write the example with ProcessIds, then there is nothing for the environment to capture, and it doesn't make our point.  We could make another example, but we didn't like the \textt{printSum} example.  So I left this section in its original place.  I think that the flow is OK; the problem is that something we identify as a major contribution comes a bit late. \vspace{2ex}}
 
-\noindent
 As we hinted in Section~\ref{s:closureForeshadow}, 
 the question of how to transmit function closures from one node to another is a fundamental one.  
 It must be addressed by any distributed implementation of a statically-typed, 
 higher-order programming language.  
-To see how pervasive this question is, consider \textt{sendFunc}, which creates an anonymous function and sends it on a channel:
+To see how pervasive this question is, consider \textt{sendFunc}, which creates an anonymous function and sends it on a channel: \label{p_sendfunc}
 \begin{code}
 -- wrong
 sendFunc :: SendPort (Int->Int) -> Int -> ProcessM ()
@@ -756,7 +763,7 @@ Now lets get back to the problem at hand: specifying that a function is serializ
 We would like to write something like:
 \begin{lstlisting}[language=Haskell,
 			escapechar={\%},
-			stringstyle=\ttfamily]
+			stringstyle=\ttfamily,keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,class,instance,import,hiding,forall,qualified,newtype,type,as}]
   instance Serializable (%\textit{types of the free variables of an}% a->b) => Serializable (a->b) where ...
 \end{lstlisting}
 but that can't be expressed, and for good reason:  serializability of a function is not a structural property of the function, because Haskell's view of a function is purely extensional.  
@@ -769,10 +776,10 @@ For example, consider the task of creating a new remote worker process:
 \begin{code}
   -- wrong
   newWorker :: ProcessM ()
-  newWorker = do { (s,r) <- newChan
-          			 ; spawn node (do { ans <- ...
-                           			  ; sendChan s ans })
-          			 ; ... }
+  newWorker = do (s,r) <- newChan
+                 spawn node (do ans <- ...
+                                sendChan s ans)
+                 ... 
 \end{code}
 %\je{I don't understand what you're trying to show with this example.}
 The second argument of \textt{spawn}, the code that we want to run on the remote \textt{node}, is a value closed over
@@ -788,11 +795,11 @@ One solution to this problem is to ``bake in'' serialization of
 function values\,---\,and indeed of all values\,---\,as a primitive operation
 implemented directly by the runtime system.  That is, the runtime system
 allows one to serialize \emph{any value at all}, and transports it to the 
-other end of the wire.  
+other end of the wire. 
 Now, function closures can be serialized by
 serializing their free variables, and adding a representation of their code.
 This approach is used by every other 
-higher-order distributed language that we know of (see Section~\ref{s:related}).
+higher-order distributed language that we know of, including Erlang (see Section~\ref{s:related}).
 However, making serializability built-in
 has multiple disadvantages:
 \begin{itemize}
@@ -936,8 +943,8 @@ bindings. However, all these functions have their usual types.
 \end{itemize}
 \subsection{From static values to closures}
 
-In the examples \textt{sendFunc} and
-\textt{newWorker} (introduced at the start of this section) we wanted to transmit closures
+In our earlier examples \textt{sendFunc} and
+\textt{newWorker} (introduced on page~\pageref{p_sendfunc}) we wanted to transmit closures
 that certainly did have free variables.  How do static terms help us?
 They help by making \emph{closure conversion} possible. A closure
 is just a pair containing a code pointer and an environment.  With the aid of
@@ -977,8 +984,7 @@ instance Binary (Closure a) where
 \end{code}
 But how can we \emph{de}-serialize a closure?  The difficulty is
 that, at the receiving end, we do not know the type captured inside
-the closure, so we do not know whch deserializer to use.  This initially
-appears to be a very awkward problem indeed. Maybe we have to send a 
+the closure, so we do not know which deserializer to use. Maybe we have to send a 
 representation of the environment type, and do a run-time type-class lookup
 at the receiving end?  Maybe
 we could send some representation of the deserialization function itself?
@@ -1021,8 +1027,8 @@ expressed using closures:
     where clo = MkClosure (static sfun) (encode x)
 
   sfun :: ByteString -> Int -> Int
-  sfun = \bs -> let x = decode bs 
-                in \y -> x + y + 1
+  sfun bs y = let x = decode bs 
+               in x + y + 1
 \end{code}
 The type of the items that can be sent on port \textt{p} is now \lstinline+(Closure+ \lstinline+(Int -> Int))+, instead of just \textt{(Int -> Int)}.
 Instead of just sending a lambda-expression on \textt{p}, we send \textt{clo}, a
@@ -1034,15 +1040,15 @@ Now let's look at the \textt{newWorker} example.
 Using closures we would rewrite it like this:
 \begin{code}
   newWorker :: ProcessM ()
-  newWorker = do { (s,r) <- newChan
-                 ; spawn node clo
-                 ; ... }
+  newWorker = do (s,r) <- newChan
+                 spawn node clo
+                 ... 
     where clo = MkClosure (static child) (encode s)
 
   child :: ByteString -> ProcessM ()
   child = \bs -> let s = decode bs
-           		   in do { ans <- ...
-               		     ; sendChan s ans }
+                  in do ans <- ...
+               	        sendChan s ans
 \end{code}
 The type of \textt{spawn} is given in Figure~\ref{fig:api}; it takes
 a closure as its second argument.
@@ -1050,11 +1056,9 @@ a closure as its second argument.
 \subsection{Summary}
 
 In this section we introduced a rather simple set of language primitives:
-\begin{itemize}
-\item A new type constructor \textt{Static}, with built-in serialization.
-\item A new term form ($\!$\textt{static$\,e$}).
-\item A new primitive function \textt{unstatic$\!$::$\!$Static a -> a}.
-\end{itemize}
+a new type constructor \textt{Static}, with built-in serialization; 
+a new term form ($\!$\textt{static$\,e$});
+and a new primitive function \textt{unstatic$\!$::$\!$Static a -> a}.
 
 
 \lstset{mathescape=false}
@@ -1123,16 +1127,16 @@ created by the Template Haskell splice \textt{$(remotable ['add1])}.
 \end{code}
 This splice expands to the following definitions
 \begin{code}
-  add1__closure :: Int -> Closure Int
-  add1__closure x = MkClosure (MkS "M.add1")(encode x)
+add1__closure :: Int -> Closure Int
+add1__closure x = MkClosure (MkS "M.add1")(encode x)
 
-  add1__dec :: ByteString -> Int -> Int
-  add1__dec bs = add1 (decode bs)
+add1__dec :: ByteString -> Int -> Int
+add1__dec bs = add1 (decode bs)
 
-  __remoteTable :: [(String, Dynamic)]
-  __remoteTable = [("add1", toDyn add1__dec)]
+__remoteTable :: [(String, Dynamic)]
+__remoteTable = [("add1", toDyn add1__dec)]
 \end{code}
-Next we see how these definitions work.
+Thus, a call to \textt{mkClosure} gives us a \emph{closure generator}, which will automatically serialize arguments of the correct type and return a closure suitable for use with \textt{spawn}. Next we see how these definitions work.
 
 \subsection{How it works}
 
@@ -1147,10 +1151,9 @@ to the appropriate implementation function composed with the environment deseria
 This table is initialised by the call to \textt{runRemote} that initialises the
 \textt{ProcessM} monad; the table may be consulted from within the monad:
 \begin{code}
-  runRemote    :: Maybe FilePath
-                   -> [(String,Dynamic)]
+runRemote :: Maybe FilePath -> [(String,Dynamic)]
                        -> ProcessM () -> IO ()
-  lookupStatic :: Typeable a => String -> ProcessM a
+lookupStatic :: Typeable a => String -> ProcessM a
 \end{code}
 The \textt{lookupStatic} function looks up the function in the table,
 and performs a run-time typecheck to ensure that the value returned
@@ -1173,8 +1176,8 @@ a little less convenient for the programmer:
 \begin{code}
   unClosure :: Typeable a => Closure a -> ProcessM a
   unClosure (MkClosure (MkS s) env)
-        = do { f <- lookupStatic s
-             ; return (f env) }
+        = do f <- lookupStatic s
+             return (f env)
 \end{code}
 
 
@@ -1450,20 +1453,20 @@ The example application distinguishes two kinds of nodes: the {\em worker} node 
 
 We arbitrarily select the computer \textt{acs-01} to host the master node, and the computer \textt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
 
-\begin{lstlisting}
+\begin{verbatim}
 cfgRole MASTER
 cfgHostName acs-01
 cfgKnownHosts acs-01 acs-02
-\end{lstlisting}
+\end{verbatim}
 
 \noindent
 And here is the configuration file for \textt{acs-02}:
 
-\begin{lstlisting}
+\begin{verbatim}
 cfgRole WORKER
 cfgHostName acs-02
 cfgKnownHosts acs-01 acs-02
-\end{lstlisting}
+\end{verbatim}
 
 The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} option should match the name by which the host is accessible on the network. The \textt{cfgKnownHosts} option sets a list of hosts where nodes might be running. The \textt{getPeers} function uses the value of \textt{cfgKnownHosts} to contact any running nodes on each of the named machines. \textt{getPeers} will then return a \textt{PeerInfo}, which can be examined with \textt{findPeerByRole} to see what other nodes are available on the network.
 
@@ -1472,14 +1475,14 @@ Of the three options given in the above configuration files, only \textt{cfgRole
 Once the configuration file and binary executable have been distributed to both of the hosts, we can run the program. Because the master node expects that the worker node will already be available, we start the program on the worker node first.
 
 Here's the code for the example application:
-\apb{I don't like omitting stuff here, certainly not the Serializable declaration for CounterMessage}
+%\apb{I don't like omitting stuff here, certainly not the Serializable declaration for CounterMessage}
 % maybe do fgrep example too? 
 
 \begin{lstlisting}[numbers=left,
 			numberstyle=\tiny,
 			language=Haskell,
 			escapeinside={\%}{\^^M},
-			stringstyle=\ttfamily]
+			stringstyle=\ttfamily,keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,class,instance,import,hiding,forall,qualified,newtype,type,as}]
 module Main where
 -- omitted: module imports
 data CounterMessage = CounterQuery ProcessId %\label{c_type}
@@ -1490,12 +1493,12 @@ data CounterMessage = CounterQuery ProcessId %\label{c_type}
 
 counterLoop :: Int -> ProcessM ()
 counterLoop val
-  = do { val' <- receiveWait [match counterCommand]
-       ; counterLoop val' }
+  = do val' <- receiveWait [match counterCommand]
+       counterLoop val'
   where
     counterCommand (CounterQuery pid) 
-      = do { send pid val
-           ; return val }
+      = do send pid val
+           return val
     counterCommand CounterIncrement = return (val + 1)
     counterCommand CounterShutdown = terminate
 
@@ -1509,20 +1512,20 @@ shutdown cpid = send cpid CounterShutdown
 
 query :: ProcessId -> ProcessM Int %\label{c_q}
 query counterpid =
-  do { mypid <- getSelfPid
-     ; send counterpid (CounterQuery mypid)
-     ; expect }
+  do mypid <- getSelfPid
+     send counterpid (CounterQuery mypid)
+     expect
 
 go "MASTER" = % \label{c_master}
-  do { aNode <- liftM (head . flip %\label{c_getpeer}
-         findPeerByRole "WORKER") getPeers
-     ; cpid <- spawn aNode %\label{c_spawn}
-                     ($(mkClosure 'counterLoop) 0)
-     ; increment cpid % \label{c_inc1}
-     ; increment cpid % \label{c_inc2}
-     ; newVal <- query cpid % \label{c_query}
-     ; say (show newVal)   -- prints out 2
-     ; shutdown cpid }
+  do aNode <- liftM (head . flip %\label{c_getpeer}
+        findPeerByRole "WORKER") getPeers
+     cpid <- spawn aNode %\label{c_spawn}
+                   ($(mkClosure 'counterLoop) 0) %\label{c_mkclo}
+     increment cpid % \label{c_inc1}
+     increment cpid % \label{c_inc2}
+     newVal <- query cpid % \label{c_query}
+     say (show newVal)   -- prints out 2
+     shutdown cpid
 
 go "WORKER" = % \label{c_slave}
   receiveWait []
@@ -1539,7 +1542,7 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
 The \textt{go} function is split into two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
-In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
+In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Note that the closure is created, and its argument automatically serialized, on line \ref{c_mkclo}. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
 \textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
 The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which are given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
@@ -1554,25 +1557,26 @@ One goal of a distributed system is to be able coordinate compute- and data-inte
 
 The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{MapReduce2008}. Each node is assigned a role of either {\em mapper} or {\em reducer}; the data points are divided evenly between the mappers. Each mapper then calculates the distance between each of its data points and the (initially random) centroid of each cluster, and on that basis assigns each point to the nearest cluster. The new assignments are collected by the reducer nodes and used to generate new cluster centroids. The new centroids are sent back to the mappers and used to repeat the algorithm, until either the centroids stop changing or the maximum number of iterations is reached.
 
-\kmeans{} is computationally demanding, data intensive, and easily partitioned, and so provides a useful test case for Cloud Haskell. We implemented the \kmeans{} algorithm and deployed it on an Amazon EC2 cluster. We used one million randomly generated 100-dimensional data points as input, and extracted $k=100$ clusters. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. We capped the number of iterations at five. The results of the tests are summarized in Figure \ref{fig:performance1}.
+\kmeans{} is computationally demanding, data intensive, and easily partitioned, and so provides a useful test case for Cloud Haskell. We compared the performance of a Cloud Haskell implementation of \kmeans{} with the Apache Mahout implementation, which is based on the Hadoop framework. We deployed both versions on an Amazon EC2 cluster, giving them one million randomly generated 100-dimensional data points as input, and extracted $k=10$ clusters. The number of iterations was fixed at five. We used one reducer node, while the number of mapper nodes was varied between one and 80. Each node was executed on an Amazon instance of type \textt{m1.small}, which is a single core virtual machine with 1.7 GB of memory. The results of the tests are summarized in Figure \ref{fig:performance1}.
 
 \begin{figure}[t]
 \centerline {
- \includegraphics[width=\columnwidth]{ec2_cropped}
+ \includegraphics[width=\columnwidth]{ec2}
 }
 \vspace{0.5ex}
 \caption{ 
 \label{fig:performance1}
-The run-time of the \kmeans{} algorithm in Cloud Haskell. The input data was one million 100-dimensional data points; we used one reducer nodes for all tests. % Performance improves at a better than linear rate as we increase the number of mapper nodes.
+The run-time of the \kmeans{} algorithm, implemented under Cloud Haskell and Hadoop. The input data was one million 100-dimensional data points.
 }
 \end{figure}
 
-It's difficult to qualitatively evaluate the performance. In results published by Ekanayakea~\cite{indiana}, an implementation of \kmeans{} in Hadoop performs about twice as fast as our unoptimized implementation. 
-However, these results are not directly comparable: first, Ekanayakea's team are using a different data set: their points are only two-dimensional, while ours are 100-dimensional. 
-Furthermore, the Hadoop tests were run on a handful of powerful multicore machines, while the Cloud Haskell tests were run a larger number of single core machines (although the total number of cores was the same), so that their nodes may have benefited from faster access to the data. 
-Based on these caveats, we estimate that given comparable tests, our framework would at least hold its own against Hadoop. 
-However, we're not so optimistic that we could catch up to the MPI framework and CGL-MapReduce, which, according to the same authors, are orders of magnitude faster than us. 
-We plan to more fully explore the performance characteristics of Cloud Haskell in the future, and specifically to address the performance issues related to locality and automatic resolution of data dependencies with the introduction of our task layer, discussed in Section \ref{s:futureWork}.
+
+The results show that Cloud Haskell has performance roughly comparable with that of the
+Hadoop framework, and in some cases superior. Although the Hadoop implementation
+performs better with fewer nodes, the Cloud Haskell version overtakes it as more nodes are
+added, and retains this lead. The greatest bottleneck in Cloud Haskell's performance is
+acquiring and loading the data; we hope to address this issue with improved file handling
+in future versions.
 
 
 % Isis/Paxos/virtual synchrony consensus?
@@ -1633,8 +1637,6 @@ complete control of serialization, via the usual type-class mechanism.
 Exposing closure conversion is a significant burden\,---\,albeit one that can be
 relieved with some syntactic sugar.  The payoff is that the 
 programmer can reason about the cost of sending a message.
-Similarly, explicit serialization will typically lose structure 
-sharing within a transmitted value, whereas a built-in mechanism can retain it\,---\,but that is also true of any traversal of a data structure.
 We do not argue that our approach is always better, but rather that it offers
 a new and unexplored design point.
 
