@@ -62,7 +62,7 @@
 \copyrightdata{978-1-4503-0860-1/11/09}
 
 
-\lstset{language=Haskell, basicstyle=\footnotesize, numbers=none, numberstyle=\footnotesize, stepnumber=1, numbersep=5pt, showspaces=false, showstringspaces=false,showtabs=false, frame=none, tabsize=2, captionpos=b, breaklines=true, breakatwhitespace=false, xleftmargin=10pt,
+\lstset{language=Haskell, basicstyle=\footnotesize, numbers=none, columns=flexible, numberstyle=\footnotesize, stepnumber=1, numbersep=5pt, showspaces=false, showstringspaces=false,showtabs=false, frame=none, tabsize=2, captionpos=b, breaklines=true, breakatwhitespace=false, xleftmargin=10pt,
 keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,class,instance,import,hiding,forall,qualified,newtype,type,as}}
 
 
@@ -73,7 +73,8 @@ keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,clas
     {\csname lst@SaveFirstLabel\endcsname}
     \lstset{
       basicstyle=\small\sffamily,
-      flexiblecolumns=false,
+      columns=flexible,
+%      flexiblecolumns=false,
       basewidth={0.5em,0.45em},
       literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
                {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
@@ -241,8 +242,7 @@ There are more general \textt{receive} functions that allow for type-dependent a
 
 \par{\small
 \begin{code}
-send :: Serializable a => ProcessId -> a 
-						-> ProcessM ()
+send :: Serializable a => ProcessId -> a -> ProcessM ()
 expect :: Serializable a => ProcessM a
 \end{code}}
 \noindent
@@ -257,8 +257,8 @@ data Pong = Pong ProcessId
 
 ping :: ProcessM ()
 ping = do Pong partner <- expect
-          self <- getSelfPid
-          send partner (Ping self)
+          myself <- getSelfPid
+          send partner (Ping myself)
           ping
 \end{code}
 
@@ -579,7 +579,7 @@ First, let's consider how to specify a pair consisting of a message type and its
 %When a message of a type acceptable to the handler function is received, \textt{match} applies the handler to that mesage. 
 
 \begin{code}
-match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
+match ::Serializable a => (a -> ProcessM q) -> MatchM q ()
 \end{code}
 \noindent
 When \textt{match} tests an incoming message, it compares the type of the message against the type \textt{a}, the parameter of the message handler. 
@@ -671,7 +671,7 @@ do send pid (Query stuff)
 \end{code}
 %\)
 
-As with Erlang's \textt{receive...after} syntax, \textt{receiveTimeout} can be called with a timeout value of zero, which has the effect of checking for a matching message and returning immediately if no match is found.
+As with Erlang's \textt{receive}\ldots\textt{after} syntax, \textt{receiveTimeout} can be called with a timeout value of zero, which has the effect of checking for a matching message and returning immediately if no match is found.
 
 \section{Messages through channels}
 %: \label{s:Channels}
