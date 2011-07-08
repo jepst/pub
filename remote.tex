@@ -76,7 +76,8 @@ keywords={let,case,of,do,where,module,in,if,then,else,data,deriving,default,clas
       columns=flexible,
 %      flexiblecolumns=false,
       basewidth={0.5em,0.45em},
-      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=\;$}}1
+      	       {::}{{\!\!::\!\!}}1
                {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
                {\\\\}{{\char`\\\char`\\}}1
                {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
@@ -256,9 +257,9 @@ data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
 
 ping :: ProcessM ()
-ping = do Pong partner <- expect
-          myself <- getSelfPid
-          send partner (Ping myself)
+ping = do self <- getSelfPid
+          Pong partner <- expect
+          send partner (Ping self)
           ping
 \end{code}
 
@@ -320,8 +321,7 @@ In fact, our implementation uses \textt{STM} to protect the message queue, as di
 \begin{code}
 instance Monad ProcessM
 instance MonadIO ProcessM
-send   :: Serializable a => ProcessId -> a
-       -> ProcessM ()
+send   :: Serializable a => ProcessId -> a -> ProcessM ()
 expect :: Serializable a => ProcessM a
 \end{code}
  \apisection{Channels}
@@ -395,7 +395,7 @@ say :: String -> ProcessM ()
 \begin{code}
 class (Binary a,Typeable a) => Serializable a
 class Typeable a where typeOf :: a -> TypeRep
-class Binary t where {put::t -> PutM (); get::Get t}
+class Binary t where {put :: t -> PutM (); get :: Get t}
 encode :: Binary a => a -> ByteString
   -- Defined in terms of put
 decode :: Binary a => ByteString -> a
@@ -538,7 +538,8 @@ Line \ref{erl_addmatch} attempts to match a tuple containing the atom \textt{add
 In the next pattern, on line \ref{erl_divmatch}, the code responds to a message with a \textt{divide} atom, but only if the divisor is not zero; this is controlled by the \textt{when} syntax. 
 Finally, the third pattern (line \ref{erl_nonzero}) will send back a \textt{div_by_zero} atom in response to all messages not matched by the previous patterns, which is to say, those cases when the divisor is zero.
 Patterns are tested against each message in the order that they appear, so that the last pattern will be reached only if the first two fail to match.
-If no patterns match, the unmatched message is left in the message queue, the whole receive statement is repeated for the next message, and so on until a match is found or the queue is exhausted.
+If no pattern matches, the unmatched message is left in the message queue, and the whole receive statement is repeated for the next message.  
+This goes on until a match is found or the queue is exhausted.
 How can we provide similar functionality in Haskell?
 
 \subsection{Receiving and Matching}
@@ -874,7 +875,6 @@ $$
 \begin{align*}
 \Gamma\downarrow ~=~ \{ x:_{\textsf{s}} \sigma \mid x :_{\textsf{s}} \sigma \in \Gamma \}
 \end{align*}
-
 \begin{equation*}
 \tag{Static~intro}\label{StaticIntro}
 \frac{\Gamma\downarrow~\entails e : \tau}
@@ -934,7 +934,7 @@ can readily compute over values of \textt{Static} type.
 \textt{Static} types. For example, this term is well-typed:
 \par{\small
 \begin{code}
-static (length$\,\circ\,$filter id)::Static ([Bool] -> Int)
+static (length$\,\circ\,$filter id) :: Static([Bool] -> Int)
 \end{code}
 }
 Looking at the argument to \textt{static}, we see that all of its free variables (\textt{length}, \textt{($\circ$)},
@@ -944,7 +944,7 @@ bindings. However, all these functions have their usual types.
 \subsection{From static values to closures}
 
 In our earlier examples \textt{sendFunc} and
-\textt{newWorker} (introduced on page~\pageref{p_sendfunc}) we wanted to transmit closures
+\textt{newWorker} (introduced on page~\pageref{p_sendfunc}), we wanted to transmit closures
 that certainly did have free variables.  How do static terms help us?
 They help by making \emph{closure conversion} possible. A closure
 is just a pair containing a code pointer and an environment.  With the aid of
@@ -1046,9 +1046,9 @@ Using closures we would rewrite it like this:
     where clo = MkClosure (static child) (encode s)
 
   child :: ByteString -> ProcessM ()
-  child = \bs -> let s = decode bs
-                  in do ans <- ...
-               	        sendChan s ans
+  child bs = let s = decode bs
+              in do ans <- ...
+               	    sendChan s ans
 \end{code}
 The type of \textt{spawn} is given in Figure~\ref{fig:api}; it takes
 a closure as its second argument.
@@ -1058,7 +1058,7 @@ a closure as its second argument.
 In this section we introduced a rather simple set of language primitives:
 a new type constructor \textt{Static}, with built-in serialization; 
 a new term form ($\!$\textt{static$\,e$});
-and a new primitive function \textt{unstatic$\!$::$\!$Static a -> a}.
+and a new primitive function \textt{unstatic$\,$::$\,$Static a -> a}.
 
 
 \lstset{mathescape=false}
@@ -1421,10 +1421,10 @@ Cloud Haskell has been tested with recent versions of the Glasgow Haskell Compil
 Some features of the implementation are:
 
 \begin{itemize}
-\item Processes are based on Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; 
+\item Processes use Concurrent Haskell's lightweight threads. The low incremental cost of running threads is important, because a single node may need to support hundreds of processes, and processes may start and end frequently. Lightweight threads are also used to service network connections; 
 each incoming network connection is handled by forking a new thread.
-\item The \textt{mergePorts} family of function was tricky to implement. It would have been simple, and wrong, to fork separate threads that called \textt{receiveChan} on each of several \textt{ReceivePort}s, but this causes an unfortunate race condition. 
-Imagine what would happen if messages are received concurrently on two ports and extracted concurrently by two threads. Only one of the messages can be returned;  because there is no way to put a message back into the channel in the original order, we would need to either re-order the channel (breaking the FIFO property) or discard the message (breaking reliability).
+\item The \textt{mergePorts} family of function was tricky to implement. It would have been simple, and wrong, to fork separate threads that called \textt{receiveChan} on each of several \textt{ReceivePort}s, but this would cause an unfortunate race condition. 
+Imagine what would happen if messages were received concurrently on two ports and were extracted concurrently by two threads. Only one of the messages can be returned: what is to be done with the other?  Because there is no way to put a message back into the channel in the original order, we would need to either re-order the channel (breaking the FIFO property) or discard the message (breaking reliability).
 
 Haskell's Software Transactional Memory (\textt{STM}) helps us solve this problem elegantly.
 \textt{STM} provides a mechanism to compose receive transactions on individual message queues in a way that ensures that only one commits.
@@ -1453,20 +1453,20 @@ The example application distinguishes two kinds of nodes: the {\em worker} node 
 
 We arbitrarily select the computer \textt{acs-01} to host the master node, and the computer \textt{acs-02} to host the worker node. The program, given below, should be compiled for both machines. Each machine also needs its own configuration file, named \textt{config}. Here is the configuration for \textt{acs-01}:
 
-\begin{verbatim}
+\begin{code}
 cfgRole MASTER
 cfgHostName acs-01
 cfgKnownHosts acs-01 acs-02
-\end{verbatim}
+\end{code}
 
 \noindent
 And here is the configuration file for \textt{acs-02}:
 
-\begin{verbatim}
+\begin{code}
 cfgRole WORKER
 cfgHostName acs-02
 cfgKnownHosts acs-01 acs-02
-\end{verbatim}
+\end{code}
 
 The \textt{cfgRole} option sets the role of the node. The \textt{cfgHostName} option should match the name by which the host is accessible on the network. The \textt{cfgKnownHosts} option sets a list of hosts where nodes might be running. The \textt{getPeers} function uses the value of \textt{cfgKnownHosts} to contact any running nodes on each of the named machines. \textt{getPeers} will then return a \textt{PeerInfo}, which can be examined with \textt{findPeerByRole} to see what other nodes are available on the network.
 
@@ -1519,8 +1519,7 @@ query counterpid =
 go "MASTER" = % \label{c_master}
   do aNode <- liftM (head . flip %\label{c_getpeer}
         findPeerByRole "WORKER") getPeers
-     cpid <- spawn aNode %\label{c_spawn}
-                   ($(mkClosure 'counterLoop) 0) %\label{c_mkclo}
+     cpid <- spawn aNode ($(mkClosure 'counterLoop) 0) %\label{c_spawn} \label{c_mkclo}
      increment cpid % \label{c_inc1}
      increment cpid % \label{c_inc2}
      newVal <- query cpid % \label{c_query}
@@ -1541,8 +1540,9 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 %Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is split into two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
-In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Note that the closure is created, and its argument automatically serialized, on line \ref{c_mkclo}. Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
+The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
+In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Note how the closure that \textt{spawn} needs as its second argument is created, and how the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
+Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
 \textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
 The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which are given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
@@ -1626,10 +1626,8 @@ of function closures are marshalled are hazy.  Rossberg's language
 Alice likewise supports type-safe distributed programming
 \cite{rossberg:alice}.  
 The Clean language supports type-safe saving of arbitrary values (including
-function closures into files \cite{clean:dynamic-io}, and in a recent
-paper proposes a mechanism for runtime solving of class constraints, although
-the idea is as yet not implemented
-\cite[Sect 4.2]{clean:wgp10}.
+function closures) into files \cite{clean:dynamic-io}; a recent
+paper proposes a mechanism (not yet implemented) for  solving  class constraints at runtime~\cite[\S4.2]{clean:wgp10}.
 
 All of these systems fundamentally regard serialization of closures
 as a built-in service.  In contrast, our work puts the programmer in
@@ -1656,7 +1654,7 @@ To make this possible, the task layer represents the computation as a directed a
 We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting project~\cite{Murray2010,Murray2011}.
 
 \acks
-We particularly thank John Launchbury who helped us see that $\text{\tt Static}\;\tau$ for an arbitrary type $\tau$
+We particularly thank John Launchbury who helped us see that $\textt{Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  John Hughes helped us to understand some details of Erlang, and we enjoyed discussing with him how to express Erlang's computational model in Haskell. Koen Claessen
 insightfully pointed out the importance of not making receive ports serializable. Thomas van Noort provided some needed editing.

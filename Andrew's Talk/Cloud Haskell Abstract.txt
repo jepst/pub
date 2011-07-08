@@ -1,0 +1,20 @@
+
+Title: Haskell for the Cloud
+
+Speaker: Dr Andrew P. Black, Professor of Computer Science at Portland State University
+
+Abstract:
+
+Prof Black will present Cloud Haskell, a domain-specific language for
+developing programs for a distributed-memory computing environment, on which
+he worked during his recent sabbatical at Microsoft Research, Cambridge. Cloud Haskell is
+implemented as a shallow embedding in Haskell; it provides a message-passing
+communication model, inspired by Erlang, without introducing incompatibility
+with Haskell's established shared-memory concurrency. A key contribution is a
+method for serializing function closures for transmission across the network.
+
+Cloud Haskell has been implemented; the talk will include some example code
+and some preliminary performance measurements.
+
+This is joint work with Jeff Epstein (Cambridge Computing Lab) and Simon
+Peyton Jones (Microsoft).
