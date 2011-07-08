@@ -143,11 +143,11 @@ Cloud Haskell has been implemented; we present example code and some preliminary
 
 
 \category{D.1.3}{Programming Techniques}{Concurrent Programming---Distributed Programming}
-\category{D.3.2}{Programming Languages}{Haskell}
+% \category{D.3.2}{Programming Languages}{Haskell}
 %
 %
 \terms
-Languages, Reliability, Performance, Distribution
+Languages, Reliability, Performance
 %
 \keywords
 Haskell, Erlang, message-passing
@@ -1603,11 +1603,13 @@ Although it may be argued that any object-oriented language that supports mobile
 All objects, including stack frames, were mobile; serialization was handled by the run-time system and depended on introspection.
 
 Implementing a framework for distributed computing in Haskell has been
-done before, in the form of Glasgow Distributed Haskell
+done before. One example is Glasgow Distributed Haskell
 \cite{gdh2001}. Unlike our work, it tries to maintain the semantics of
 shared-memory concurrency in a distributed environment, rather than
 insisting on message-based communication between nodes. We argue that this is 
 undesirable because it gives the programmer no model for reasoning about the costs of the computation.  
+
+Eden~\cite{eden2003} is an extension to Haskell that provides distributed process semantics. Unlike Cloud Haskell, its process abstraction and function serialization are built into the language, and therefore has no need of a process state monad. Although it lacks a mechanism for fault tolerance, it supports a rich library of higher-order functions as well as a debugging tools such a trace viewer.
 
 Our operations on channels are somewhat reminiscent of Concurrent ML's events~\cite{reppy:book}.
 However, Concurrent ML does not support distribution because that would be incompatible with its
