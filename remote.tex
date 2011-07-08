@@ -257,8 +257,8 @@ data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
 
 ping :: ProcessM ()
-ping = do self <- getSelfPid
-          Pong partner <- expect
+ping = do Pong partner <- expect
+          self <- getSelfPid
           send partner (Ping self)
           ping
 \end{code}
@@ -1541,7 +1541,7 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
 The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
-In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. Note how the closure that \textt{spawn} needs as its second argument is created, and how the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
+In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. The closure in \textt{spawn}'s second argument is created and the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
 Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
 \textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
