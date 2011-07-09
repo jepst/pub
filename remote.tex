@@ -171,7 +171,9 @@ In a distributed memory system, the most significant cost, in both energy and ti
 A programmer trying to reduce these costs needs a model in which they are explicit, not one that denies that data movement is even taking place\,---\,which is exactly the premise of a simulated shared memory. 
 
 
-One reason that this model of distributed computing has not been brought to Haskell before is that it requires a mechanism to run code on remote systems. To solve this, we present a novel method for serializing function closures. Our method does not require extending the compiler, but yet provides an intuitive syntax that hides the underlying serialization mechanism from the programmer.
+One reason that this model of distributed computing has not previously been brought to Haskell is that it requires a way of running code on a remote system. 
+Our work provides this, in the form of a novel method for serializing function closures.
+Without extending the compiler, our method hides the underlying serialization mechanism from the programmer, but makes serialization itself explicit.
 
 In many ways, failure is \emph{the} defining issue of distributed computation.  
 In a network of hundreds of computers, some of them are likely to fail during the course of an extended computation; if our only recourse were to restart the computation from the beginning, the likelihood of it ever completing would become ever smaller as the system scales up.  
@@ -189,11 +191,13 @@ For example, a function that has an externally-visible effect such as sending or
 Monadic types make it convenient to program in an effectful style when that is appropriate, while ensuring that the programmer cannot accidentally mix up the pure and effectful code.
 
 The contributions of this paper are as follows.
+
 \begin{itemize}
 \item A description of Cloud Haskell's interface functions (Sections \ref{s:ProcessesAndMessages} and \ref{s:matching}). Following Erlang, our language provides a system for exchanging messages between lightweight concurrent processes, regardless of whether they are running on one computer or on many. We also provide functions for starting new remote processes, and for fault tolerance, which closely follow Erlang. 
 However, unlike Erlang, Cloud Haskell also allows shared-memory concurrency \emph{within} one of its processes.
 
-\item An additional message-passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. We believe that this interface will play well with Haskell's emphasis on static types.
+\item An additional message-passing interface that uses multiple \emph{typed channels} in place of Erlang's single untyped channel (Section~\ref{s:Channels}).  Each channel is realized as a pair of ports; while the send port can be transmitted over the network, the receive port cannot. 
+%We believe that this interface will play well with Haskell's emphasis on static types.
 
 \item A method for serializing function closures that enables higher-order functions to be used in a distributed environment (Section~\ref{s:closures}). Starting a remote process means sending a representation of a function and its environment across the network;  our approach makes the environment \emph{explicit}, and thus gives the programmer control over the cost of the message.
 
@@ -220,12 +224,12 @@ In most respects, Cloud Haskell follows Erlang by favoring message-passing as th
 
 \begin{figure}[t]
 \centerline {
- \includegraphics[width=0.95\columnwidth]{threadsAndProcesses}
+ \includegraphics[width=0.9\columnwidth]{threadsAndProcesses}
 }
 \caption{ 
 %: \label{fig:ProcessBubbles}
 \label{fig:ProcessBubbles}
-Processes A and B do not share memory, even though they are running on the same physical processor, that is, the same node. Instead they communicate by sending messages, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \textt{forkIO} primitive; these threads share memory with Process E and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \textt{ProcessM} monad; threads, in contrast, execute in the \textt{IO} monad.
+Processes A and B do not share memory, even though they are running on the same physical processor; instead they communicate by sending messages, shown by grey arrows.  This makes it easy to reconfigure the application to resemble the situation shown with processes C and D.  Process E has created some lightweight threads using Concurrent Haskell's \textt{forkIO} primitive; these threads share memory with Process E, and with each other.  However, they cannot send or receive messages from Process E's channels, because this requires execution in the \textt{ProcessM} monad; threads, in contrast, execute in the \textt{IO} monad.
 }
 \end{figure}
 
@@ -234,9 +238,9 @@ Processes A and B do not share memory, even though they are running on the same 
 %: \label{s:sendAndExpect}
 \label{s:sendAndExpect}
 
-Any process can send and receive messages. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (most especially, the message queue) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
+Any process can send and receive {messages}. Our messages are asynchronous, reliable, and buffered.  All the state associated with messaging (e.g., the message buffer) is wrapped in the \textt{ProcessM} monad, which is updated with each messaging action. Thus, any code participating in messaging must be in the \textt{ProcessM} monad.
 
-Cloud Haskell provides two styles of message passing: \emph{untyped messages}, which closely follow the semantics of messages as laid out in Erlang; and \emph{typed channels}, which leverage Haskell's strong type system to provide static guarantees about the content of messages. In this section, we discuss untyped messages. We address channels in Section~\ref{s:Channels}.
+Cloud Haskell provides two styles of message passing: \emph{untyped messages}, which closely resemble messages in Erlang; and \emph{typed channels}, which leverage Haskell's strong type system to provide static guarantees about the content of messages. In this section, we discuss untyped messages; we describe channels in Section~\ref{s:Channels}.
 
 The primitives for untyped messaging are \textt{send} and \textt{expect}\footnote{Why \textt{expect} rather than \textt{receive}?  The intent is that \textt{expect} is used when the program \emph{expects} a message of a particular type.  
 There are more general \textt{receive} functions that allow for type-dependent and conditional receives;  these are discussed in Section~\ref{s:matching}.}:
@@ -249,13 +253,15 @@ expect :: Serializable a => ProcessM a
 \noindent
 
 Before we discuss these primitives in detail, let's look at an example of their use.
-\textt{ping} is a process that accepts ``pong'' messages and responds by sending a ``ping'' to whatever process sent the pong. Using \textt{send} and \textt{expect}, the code for such a process would look like this:
-
+\textt{ping} is a process that accepts ``pong'' messages and responds by sending a ``ping'' to whatever process sent the pong. 
+The data types are:
 \begin{code}
 data Ping = Ping ProcessId
 data Pong = Pong ProcessId
 -- omitted: Serializable instance for Ping and Pong
-
+\end{code}
+Using \textt{send} and \textt{expect}, the code for such a process would be:
+\begin{code}
 ping :: ProcessM ()
 ping = do Pong partner <- expect
           self <- getSelfPid
@@ -330,8 +336,7 @@ newChan  :: Serializable a
          => ProcessM (SendPort a, ReceivePort a)
 sendChan :: Serializable a 
          => SendPort a -> a -> ProcessM ()
-receiveChan :: Serializable a => ReceivePort a
-            -> ProcessM a
+receiveChan :: Serializable a => ReceivePort a -> ProcessM a
 mergePortsBiased :: Serializable a => [ReceivePort a]
                  -> ProcessM (ReceivePort a)
 mergePortsRR :: Serializable a => [ReceivePort a] 
@@ -344,11 +349,10 @@ instance Monad MatchM
 receiveWait    :: [MatchM q ()] -> ProcessM q
 receiveTimeout :: Int -> [MatchM q ()] 
                -> ProcessM (Maybe q)
-match   :: Serializable a => (a -> ProcessM q) 
-        -> MatchM q ()
+match :: Serializable a => (a -> ProcessM q) -> MatchM q ()
 matchIf :: Serializable a => (a -> Bool) 
         -> (a -> ProcessM q) -> MatchM q ()
-matchUnknown :: ProcessM q -> MatchM q ()
+matchUnknown ::  ProcessM q -> MatchM q ()
 \end{code}
 
  \apisection{Process management}
@@ -602,7 +606,7 @@ matchIf :: Serializable a => (a -> Bool) ->
 \end{code}
 
 Now let's use these tools to implement the \textt{math} function in Haskell. 
-Notice that the patterns from the Erlang version on page~\pageref{erl_math} have been replaced with arguments to match that are lambda functions.
+Notice that Erlang's patterns (lines 3, 5 and 7 of the code on page~\pageref{erl_math}) have been replaced by lambda functions.
 
 \needspace{14ex}
 \begin{code}
@@ -1540,7 +1544,7 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 %Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, and one on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
+The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, while the other, on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
 In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. The closure in \textt{spawn}'s second argument is created and the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
 Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
@@ -1575,8 +1579,8 @@ The results show that Cloud Haskell has performance roughly comparable with that
 Hadoop framework, and in some cases superior. Although the Hadoop implementation
 performs better with fewer nodes, the Cloud Haskell version overtakes it as more nodes are
 added, and retains this lead. The greatest bottleneck in Cloud Haskell's performance is
-acquiring and loading the data; we hope to address this issue with improved file handling
-in future versions.
+acquiring and loading the data; we hope to address this issue by improving file handling.
+% in future versions.
 
 
 % Isis/Paxos/virtual synchrony consensus?
@@ -1609,7 +1613,7 @@ shared-memory concurrency in a distributed environment, rather than
 insisting on message-based communication between nodes. We argue that this is 
 undesirable because it gives the programmer no model for reasoning about the costs of the computation.  
 
-Eden~\cite{eden2003} is an extension to Haskell that provides distributed process semantics. Unlike Cloud Haskell, its process abstraction and function serialization are built into the language, and therefore has no need of a process state monad. Although it lacks a mechanism for fault tolerance, it supports a rich library of higher-order functions as well as a debugging tools such a trace viewer.
+Eden~\cite{Loogen2005} is an extension to Haskell that provides distributed processes that encapsulate functions.  The construction, use, and serialization of these processes are built into the implementation, which will copy all of the bindings needed for the evaluation of a function's free variables. Eden also supports a rich library of higher-order functions, as well as a debugging tools such a trace viewer; these are features that we  envision as part of our task layer (see Section \ref{s:futureWork}).
 
 Our operations on channels are somewhat reminiscent of Concurrent ML's events~\cite{reppy:book}.
 However, Concurrent ML does not support distribution because that would be incompatible with its
@@ -1631,8 +1635,8 @@ The Clean language supports type-safe saving of arbitrary values (including
 function closures) into files \cite{clean:dynamic-io}; a recent
 paper proposes a mechanism (not yet implemented) for  solving  class constraints at runtime~\cite[\S4.2]{clean:wgp10}.
 
-All of these systems fundamentally regard serialization of closures
-as a built-in service.  In contrast, our work puts the programmer in
+A fundamental feature of all of these systems is that serialization of funciton closures
+is built-in.  In contrast, our work puts the programmer in
 complete control of serialization, via the usual type-class mechanism.
 Exposing closure conversion is a significant burden\,---\,albeit one that can be
 relieved with some syntactic sugar.  The payoff is that the 
@@ -1652,14 +1656,14 @@ At the higher level, we have designed a framework that builds on the interface d
 In it, the main unit of abstraction changes from the process to the \emph{task}: an idempotent, restartable block of code that produces a well-defined result. The task layer of the framework, like the process layer presented in this paper, is accessible as a domain-specific language (DSL) embedded in Haskell as a monad.
 
 Whereas the DSL described here lets programmers start processes, exchange messages, and detect failure, the task-based framework takes care of allocating tasks to physical resources, resolving data dependencies between tasks, and automatically recovering from failure. 
-To make this possible, the task layer represents the computation as a directed acyclic graph, in which tasks are the vertices and the data dependencies between then are the edges, and are exposed to the programmer as \emph{promises}.
+To make this possible, the task layer represents the computation as a directed acyclic graph, in which tasks are the vertices and the data dependencies between them are the edges, and are exposed to the programmer as \emph{promises}.
 We hope that the task layer will provide functionality similar to well-known distributed frameworks such as MapReduce~\cite{MapReduce2008} and Dryad~\cite{Dryad2007}, although our immediate inspiration comes from the Skywriting project~\cite{Murray2010,Murray2011}.
 
 \acks
 We particularly thank John Launchbury who helped us see that $\textt{Static}\;\tau$ for an arbitrary type $\tau$
 would be an improvement over a static \emph{function} type 
 $\sigma \nfn \tau$.  John Hughes helped us to understand some details of Erlang, and we enjoyed discussing with him how to express Erlang's computational model in Haskell. Koen Claessen
-insightfully pointed out the importance of not making receive ports serializable. Thomas van Noort provided some needed editing.
+insightfully pointed out the importance of not making receive ports serializable. Thomas van Noort provided some needed editing, and the anonymous referees suggested several improvements.
 Andrew Black thanks Microsoft Research, Ltd, for providing a congenial home during his sabbatical.
 Jeff Epstein thanks Alan Mycroft for his support and helpful feedback. 
 
