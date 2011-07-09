@@ -1544,7 +1544,7 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 %Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, while the other, on line \ref{c_slave}, defines the behaviour of the node designated as worker. 
+The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, while the other, on line \ref{c_slave}, indicates that worker nodes should idly wait for the master to start a process.
 In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. The closure in \textt{spawn}'s second argument is created and the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
 Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
@@ -1613,7 +1613,7 @@ shared-memory concurrency in a distributed environment, rather than
 insisting on message-based communication between nodes. We argue that this is 
 undesirable because it gives the programmer no model for reasoning about the costs of the computation.  
 
-Eden~\cite{Loogen2005} is an extension to Haskell that provides distributed processes that encapsulate functions.  The construction, use, and serialization of these processes are built into the implementation, which will copy all of the bindings needed for the evaluation of a function's free variables. Eden also supports a rich library of higher-order functions, as well as a debugging tools such a trace viewer; these are features that we  envision as part of our task layer (see Section \ref{s:futureWork}).
+Eden~\cite{Loogen2005} is an extension to Haskell that provides distributed processes that encapsulate functions.  The construction, use, and serialization of these processes are built into the implementation, which will copy all of the bindings needed for the evaluation of a function's free variables. Eden also supports a rich library of higher-order functions, as well as a debugging tools such a trace viewer.
 
 Our operations on channels are somewhat reminiscent of Concurrent ML's events~\cite{reppy:book}.
 However, Concurrent ML does not support distribution because that would be incompatible with its
