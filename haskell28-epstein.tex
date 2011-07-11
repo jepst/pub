@@ -1,19 +1,14 @@
 %-----------------------------------------------------------------------------
-%
-%               Template for sigplanconf LaTeX Class
-%
-% Name:         sigplanconf-template.tex
-%
-% Purpose:      A template for sigplanconf.cls, which is a LaTeX 2e class
-%               file for SIGPLAN conference proceedings.
-%
-% Author:       Paul C. Anagnostopoulos
-%               Windfall Software
-%               978 371-2316
-%               paul@windfall.com
-%
-% Created:      15 February 2005
-%
+% Final submittable version, with embedded bibliography
+% To compile:
+%   As pdf:
+%     pdflatex haskell28-epstein.tex
+%   As ps:
+%     first, update graphics references:
+%        ec2 -> ec2.eps
+%        threadsAndProcesses -> threadsAndProcesses.ps
+%     latex haskell28-epstein.tex
+%     dvips -P pdf -t letter haskell28-epstein.dvi
 %-----------------------------------------------------------------------------
 
 
@@ -35,6 +30,9 @@
 \usepackage{ifthen}
 \usepackage{needspace}
 \usepackage{url}
+
+\pdfpagewidth=8.5in
+\pdfpageheight=11in
 
 \urlstyle{sf}
 
@@ -224,7 +222,7 @@ In most respects, Cloud Haskell follows Erlang by favoring message-passing as th
 
 \begin{figure}[t]
 \centerline {
- \includegraphics[width=0.9\columnwidth]{threadsAndProcesses.ps}
+ \includegraphics[width=0.9\columnwidth]{threadsAndProcesses}
 }
 \caption{ 
 %: \label{fig:ProcessBubbles}
@@ -1565,7 +1563,7 @@ The \kmeans{} algorithm can be described as a generalization of MapReduce~\cite{
 
 \begin{figure}[t]
 \centerline {
- \includegraphics[width=\columnwidth]{ec2.eps}
+ \includegraphics[width=\columnwidth]{ec2}
 }
 \vspace{0.5ex}
 \caption{ 
@@ -1670,15 +1668,142 @@ Jeff Epstein thanks Alan Mycroft for his support and helpful feedback.
 % The bibliography should be embedded for final submission.
 
 \bibliographystyle{abbrvnat}
-\bibliography{bib}
 
-%\bibliographystyle{abbrvnat}
-%\begin{thebibliography}{}
-%\softraggedright
-%
-%\bibitem[Smith et~al.(2009)Smith, Jones]{smith02}
-%P. Q. Smith, and X. Y. Jones. ...reference text...
-%
-%\end{thebibliography}
+\begin{thebibliography}{20}
+\softraggedright
+
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Armstrong et~al.(1993)Armstrong, Virding, Wikstr{\"o}m, and
+  Williams]{Erlang93}
+J.~Armstrong, R.~Virding, C.~Wikstr{\"o}m, and M.~Williams.
+\newblock Concurrent programming in {Erlang}, 1993.
+
+\bibitem[Bailey(1997)]{bailey:paraml}
+P.~Bailey.
+\newblock \emph{Process-oriented language design for distributed address
+  spaces}.
+\newblock PhD thesis, Australian National University, Jan. 1997.
+
+\bibitem[Birrell and Nelson(1984)]{birrel1984}
+A.~D. Birrell and B.~J. Nelson.
+\newblock Implementing remote procedure calls.
+\newblock \emph{TOCS}, 2\penalty0 (1):\penalty0 39--59, 1984.
+
+\bibitem[Dean and Ghemawat(2008)]{MapReduce2008}
+J.~Dean and S.~Ghemawat.
+\newblock Mapreduce: simplified data processing on large clusters.
+\newblock \emph{Commun. ACM}, 51:\penalty0 107--113, January 2008.
+\newblock ISSN 0001-0782.
+
+\bibitem[Fre(2008)]{free-s2008}
+\emph{The {GNU} {Mach} Reference Manual}.
+\newblock Free Software Foundation, Inc., for system version 1.3.99. edition,
+  November 2008.
+\newblock \url{http://www.gnu.org/software/hurd/gnumach-doc/}.
+
+\bibitem[Gropp et~al.(1999)Gropp, Lusk, and Skjellum]{mpi99}
+W.~Gropp, E.~Lusk, and A.~Skjellum.
+\newblock \emph{Using {MPI}: Portable Parallel Programming with the Message
+  Passing Interface, {\rm 2nd edition}}.
+\newblock MIT Press, Cambridge, MA, 1999.
+
+\bibitem[Isard et~al.(2007)Isard, Budiu, Yu, Birrell, and Fetterly]{Dryad2007}
+M.~Isard, M.~Budiu, Y.~Yu, A.~Birrell, and D.~Fetterly.
+\newblock Dryad: distributed data-parallel programs from sequential building
+  blocks.
+\newblock In \emph{Proc EuroSys'07; Oper. Syst. Rev.}, volume~41, pages 59--72.
+  ACM SIGOPS, March 2007.
+
+\bibitem[Jul et~al.(1988)Jul, Levy, Hutchinson, and Black]{jul1988}
+E.~Jul, H.~Levy, N.~Hutchinson, and A.~Black.
+\newblock Fine-grained mobility in the {Emerald} system.
+\newblock \emph{TOCS}, 6\penalty0 (1):\penalty0 109--133, 1988.
+
+\bibitem[Loogen et~al.(2005)Loogen, Ortega-{Mall\'{e}n}, and
+  {Pe\~{n}a}-{Mar\'{\i}}]{Loogen2005}
+R.~Loogen, Y.~Ortega-{Mall\'{e}n}, and R.~{Pe\~{n}a}-{Mar\'{\i}}.
+\newblock Parallel functional programming in {Eden}.
+\newblock \emph{J. Funct. Programming}, 15:\penalty0 431--475, May 2005.
+
+\bibitem[Murray and Hand(2010)]{Murray2010}
+D.~G. Murray and S.~Hand.
+\newblock Scripting the cloud with {Skywriting}.
+\newblock In \emph{Proc. 2nd USENIX conference on Hot topics in cloud
+  computing}, HotCloud'10, pages 12--12, Berkeley, CA, USA, 2010.
+
+\bibitem[Murray and Hand(2011)]{Murray2011}
+D.~G. Murray and S.~Hand.
+\newblock {\textsc{Ciel}}: a universal execution engine for distributed
+  data-flow computing.
+\newblock In \emph{NSDI '11: Proc. eighth symposium on Networked Systems Design
+  and Implementation}, Berkeley, CA, USA, 2011. USENIX.
+
+\bibitem[Pitt and McNiff(2001)]{javarmi}
+E.~Pitt and K.~McNiff.
+\newblock \emph{Java.rmi: The Remote Method Invocation Guide}.
+\newblock Addison-Wesley, Boston, MA, USA, 2001.
+
+\bibitem[Pointon et~al.(2000)Pointon, Trinder, and Loidl]{gdh2001}
+R.~Pointon, P.~Trinder, and H.-W. Loidl.
+\newblock The design and implementation of {Glasgow} {Distributed} {Haskell}.
+\newblock In M.~Mohnen and P.~Koopman, editors, \emph{Implementation of
+  Functional Languages}, volume 2011 of \emph{LNCS}, pages 53--70. Springer,
+  2000.
+
+\bibitem[Rashid and Robertson(1981)]{Rashid81}
+R.~F. Rashid and G.~G. Robertson.
+\newblock Accent: A communication oriented network operating systems kernel.
+\newblock In \emph{Proc. eighth ACM Symp. Operating Systems Principles}, pages
+  64--75. ACM SIGOPS, October 1981.
+
+\bibitem[Reppy(1999)]{reppy:book}
+J.~Reppy.
+\newblock \emph{Concurrent programming in {ML}}.
+\newblock Cambridge University Press, 1999.
+
+\bibitem[Rossberg(2007)]{rossberg:alice}
+A.~Rossberg.
+\newblock \emph{Typed Open Programming\,---\,A higher-order, typed approach to
+  dynamic modularity and distribution}.
+\newblock PhD thesis, Universit\"{a}t des Saarlandes, Jan. 2007.
+
+\bibitem[Sewell et~al.(2007)Sewell, Leifer, Wansbrough, Nardelli,
+  Allen-Williams, Habouzit, and Vafeiadis]{acute:jfp}
+P.~Sewell, J.~Leifer, K.~Wansbrough, F.~Nardelli, M.~Allen-Williams,
+  P.~Habouzit, and V.~Vafeiadis.
+\newblock Acute: high level programming language design for distributed
+  computation.
+\newblock \emph{J. Funct. Programming}, 17\penalty0 (4 \& 5):\penalty0
+  547--612, 2007.
+
+\bibitem[van Noort et~al.(2010)van Noort, Achten, and Plasmeijer]{clean:wgp10}
+T.~van Noort, P.~Achten, and R.~Plasmeijer.
+\newblock Ad-hoc polymorphism and dynamic typing in a statically typed
+  functional language.
+\newblock In \emph{Proc 6th ACM Workshop on Generic Programming, Baltimore}.
+  ACM, Sept. 2010.
+
+\bibitem[Vervoot and Plasmeijer(2002)]{clean:dynamic-io}
+M.~Vervoot and R.~Plasmeijer.
+\newblock Lazy dynamic input/output in the lazy functional language {Clean}.
+\newblock In \emph{Proc 14th Workshop on the Implementation of Functional
+  Languages (IFL'02)}, volume 2670 of \emph{LNCS}, pages 101--117. Springer,
+  Sept. 2002.
+
+\bibitem[Vinoski(1997)]{corbaidl}
+S.~Vinoski.
+\newblock {CORBA}: integrating diverse applications within distributed
+  heterogeneous environments.
+\newblock \emph{IEEE Communications Magazine}, 35\penalty0 (2):\penalty0
+  46--55, Feb. 1997.
+
+\end{thebibliography}
+
+
 
 \end{document}
