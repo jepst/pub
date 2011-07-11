@@ -1490,8 +1490,8 @@ Here's the code for the example application:
 module Main where
 -- omitted: module imports
 data CounterMessage = CounterQuery ProcessId %\label{c_type}
-                    | CounterShutdown
-                    | CounterIncrement 
+                     | CounterShutdown
+                     | CounterIncrement 
                     deriving (Typeable)
 -- omitted: Serializable instance of CounterMessage
 
@@ -1544,12 +1544,12 @@ Notice that \textt{runRemote} is given a list of function lookup tables, one for
 %Each invocation of \textt{remotable} generates a separate lookup table, and tables from all modules should be given to \textt{runRemote} to make it possible to invoke closures. 
 The lookup tables are merged and stored in the \textt{ProcessM} monad, where they are accessible to \textt{unClosure}.
 
-The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, while the other, on line \ref{c_slave}, indicates that worker nodes should idly wait for the master to start a process.
-In this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on it. The closure in \textt{spawn}'s second argument is created and the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
+The \textt{go} function is defined in two parts: one, on line \ref{c_master}, defines the behaviour of the node designated as master, while the other, on line \ref{c_slave}, indicates that worker nodes should idly wait for the master to start a process:
+in this application, all work is initiated by the master. On line \ref{c_getpeer}, the master calls \textt{getPeers} to discover other nodes on the network. It picks the first worker node and calls \textt{spawn} on line \ref{c_spawn} to start the \textt{counterLoop} function on that node. The closure in \textt{spawn}'s second argument is created and the closure's argument is automatically serialized. %, on line \ref{c_mkclo}. 
 Using the ID of the new process, the main program then sends two increment commands (on lines \ref{c_inc1} and \ref{c_inc2}) to the counter and then queries the new value (line \ref{c_query}), which it outputs, before asking the process to shut itself down.
 
 \textt{counterLoop} maintains the state of the counter and responds to messages pertaining to that counter. It understands three messages: increment, which will increment the value of the counter; query, which will send the current value of the counter to the sender; and shutdown, which will end the counter process. 
-The type of these commands is declared on line \ref{c_type}, and each command has a convenience function, which are given on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}. The \textt{counterLoop} function demonstrates a technique to store process-local state: the function tail-recursively calls itself after processing each message, each time giving itself an updated value of the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
+The type of these messages is declared on line \ref{c_type}; convenience functions, defined on lines \ref{c_i}, \ref{c_t}, and \ref{c_q}, are used to send the messages. The \textt{counterLoop} function demonstrates a technique for storing process-local state: the function tail-recursively calls itself after processing each message, each time giving itself a new value for the counter. Handling a query message doesn't change the counter, so it tail-recurses with the same value, whereas the increment message is handled by tail-recursing with the successor of the current value.
 
 Notice that it is not necessary to do any explicit thread synchronization in this program. All messages sent to the counter process are handled synchronously, in FIFO order, so it is impossible to create a race condition on the counter.
 
@@ -1608,12 +1608,12 @@ All objects, including stack frames, were mobile; serialization was handled by t
 
 Implementing a framework for distributed computing in Haskell has been
 done before. One example is Glasgow Distributed Haskell
-\cite{gdh2001}. Unlike our work, it tries to maintain the semantics of
+\cite{gdh2001}, which differs form our work in that it maintains the semantics of
 shared-memory concurrency in a distributed environment, rather than
 insisting on message-based communication between nodes. We argue that this is 
 undesirable because it gives the programmer no model for reasoning about the costs of the computation.  
 
-Eden~\cite{Loogen2005} is an extension to Haskell that provides distributed processes that encapsulate functions.  The construction, use, and serialization of these processes are built into the implementation, which will copy all of the bindings needed for the evaluation of a function's free variables. Eden also supports a rich library of higher-order functions, as well as a debugging tools such a trace viewer.
+Another example is Eden~\cite{Loogen2005}, an extension to Haskell that provides distributed processes that encapsulate functions.  The construction, use, and serialization of these processes are built into the implementation, which will copy all of the bindings needed for the evaluation of a function's free variables. Eden also supports a rich library of higher-order functions, as well as a debugging tools such a trace viewer.
 
 Our operations on channels are somewhat reminiscent of Concurrent ML's events~\cite{reppy:book}.
 However, Concurrent ML does not support distribution because that would be incompatible with its
